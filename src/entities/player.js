@@ -29,7 +29,7 @@ class Player {
     this.chargeReady = false;
     this.isCharging = false;
     this.chargedAttack = false;
-    this._prevMouseDown = false;
+    this._prevSpaceDown = false;
 
     this._isSpinAttackActive = false;
 
@@ -70,7 +70,6 @@ class Player {
     const t = this.talents.effects;
 
     this._cachedMaxHp = Math.round(s.maxHp + t.maxHp);
-    this._cachedDamage = Math.round(s.damage * (1 + t.damageMult));
     this._cachedSpeed = s.speed * (1 + t.speedMult);
     this._cachedDash = s.dashSpeed * (1 + t.speedMult);
     this._cachedRange = s.attackRange * (1 + t.rangeMult);
@@ -82,6 +81,12 @@ class Player {
       this.shieldMax = t.arcaneShield;
       this.shieldHp = t.arcaneShield;
     }
+  }
+
+  get damage() {
+    const s = this.stats;
+    const t = this.talents.effects;
+    return s.damage * (1 + t.damageMult);
   }
 
   refreshStats() {
@@ -131,7 +136,7 @@ class Player {
     if (!this.alive || this.attackTimer > 0) return;
     if (this.attackCooldown > 0) { this.attackQueued = true; return; }
     this.attackTimer = this.attackDuration;
-    this.attackCooldown = charged ? 0.7 : 0.4;
+    this.attackCooldown = charged ? 1.2 : 0.4;
     this.attackHitApplied = false;
     this.attackQueued = false;
     this.chargedAttack = !!charged;
@@ -197,18 +202,18 @@ class Player {
     }
 
     const canCharge = this.stats.level >= 3 || this.abilities.has('charge');
-    const mouseDown = input.mouseDown;
-    const mouseJustPressed = mouseDown && !this._prevMouseDown;
-    const mouseJustReleased = !mouseDown && this._prevMouseDown;
+    const spaceDown = input.isDown('Space');
+    const spaceJustPressed = spaceDown && !this._prevSpaceDown;
+    const spaceJustReleased = !spaceDown && this._prevSpaceDown;
 
     if (canCharge) {
-      if (mouseJustPressed) {
+      if (spaceJustPressed && this.attackTimer <= 0) {
         this.isCharging = true;
         this.chargeTime = 0;
         this.chargeReady = false;
       }
 
-      if (this.isCharging && mouseDown) {
+      if (this.isCharging && spaceDown) {
         this.chargeTime += dt;
 
         if (this.chargeTime >= this.chargeMax) {
@@ -224,28 +229,23 @@ class Player {
         }
       }
 
-      if (this.isCharging && mouseJustReleased) {
+      if (this.isCharging && spaceJustReleased) {
         const charged = this.chargeReady;
         this.isCharging = false;
         this.chargeTime = 0;
         this.chargeReady = false;
         this.startAttack(charged);
       }
-
-      if (this.attackQueued && this.attackCooldown <= 0 && this.attackTimer <= 0 && !this.isCharging) {
-        this.attackQueued = false;
-        this.startAttack(false);
-      }
-    } else {
-      if (input.attacking) {
-        this.startAttack(false);
-      } else if (this.attackQueued && this.attackCooldown <= 0 && this.attackTimer <= 0) {
-        this.attackQueued = false;
-        this.startAttack(false);
-      }
     }
 
-    this._prevMouseDown = mouseDown;
+    this._prevSpaceDown = spaceDown;
+
+    if (input.mouseDown) {
+      this.startAttack(false);
+    } else if (this.attackQueued && this.attackCooldown <= 0 && this.attackTimer <= 0) {
+      this.attackQueued = false;
+      this.startAttack(false);
+    }
 
     if (input.consumeRightClick(dt)) {
       this.startSpinAttack();
@@ -278,7 +278,7 @@ class Player {
       if (this.talents.effects.phantomDash) {
         this.phantoms.push({
           x: this.x, y: this.y, facing: this.facing,
-          life: 0.4, maxLife: 0.4, damage: Math.round(this._cachedDamage * 0.5),
+          life: 0.4, maxLife: 0.4, damage: Math.round(this.damage * 0.5),
         });
       }
     }
@@ -390,11 +390,11 @@ class Player {
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       const al = this.levelUpFlash / 0.6;
-      const grad = ctx.createRadialGradient(px, py, 0, px, py, 140);
-      grad.addColorStop(0, 'rgba(176, 112, 255, ' + (al * 0.6) + ')');
-      grad.addColorStop(1, 'rgba(176, 112, 255, 0)');
-      ctx.fillStyle = grad;
-      ctx.fillRect(px - 140, py - 140, 280, 280);
+      ctx.globalAlpha = al * 0.4;
+      ctx.fillStyle = '#b070ff';
+      ctx.beginPath();
+      ctx.arc(px, py, 60, 0, Math.PI * 2);
+      ctx.fill();
       ctx.restore();
     }
 
@@ -403,15 +403,14 @@ class Player {
       ctx.globalCompositeOperation = 'lighter';
       const a = Math.min(1, this.chargeTime / this.chargeMax);
       const r = 30 + a * 20;
-      const grad = ctx.createRadialGradient(px, py, 0, px, py, r);
       const col = this.chargeReady ? '255, 220, 80' : '74, 158, 255';
-      grad.addColorStop(0, 'rgba(' + col + ', ' + (0.4 * a) + ')');
-      grad.addColorStop(1, 'rgba(' + col + ', 0)');
-      ctx.fillStyle = grad;
+      ctx.globalAlpha = 0.3 * a;
+      ctx.fillStyle = 'rgb(' + col + ')';
       ctx.beginPath();
       ctx.arc(px, py, r, 0, Math.PI * 2);
       ctx.fill();
 
+      ctx.globalAlpha = 1;
       ctx.strokeStyle = this.chargeReady ? '#ffdd44' : '#4a9eff';
       ctx.lineWidth = 3;
       ctx.beginPath();
@@ -423,28 +422,25 @@ class Player {
     if (this.shieldHp > 0) {
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      const grad = ctx.createRadialGradient(px, py, this.radius * 0.5, px, py, this.radius * 2.5);
       const a = this.shieldHp / this.shieldMax;
-      grad.addColorStop(0, 'rgba(100, 180, 255, 0)');
-      grad.addColorStop(1, 'rgba(100, 180, 255, ' + (a * 0.4) + ')');
-      ctx.fillStyle = grad;
+      ctx.globalAlpha = a * 0.3;
+      ctx.strokeStyle = '#64b4ff';
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(px, py, this.radius * 2.5, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.arc(px, py, this.radius * 2.2, 0, Math.PI * 2);
+      ctx.stroke();
       ctx.restore();
     }
 
     if (this.buffTimer > 0) {
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      const color = this.buffType === 'damage' ? '255, 100, 100' : '100, 255, 200';
+      const color = this.buffType === 'damage' ? '#ff6464' : '#64ffc8';
       const a = Math.min(1, this.buffTimer / 2);
-      const grad = ctx.createRadialGradient(px, py, 0, px, py, this.radius * 3);
-      grad.addColorStop(0, 'rgba(' + color + ', ' + (a * 0.25) + ')');
-      grad.addColorStop(1, 'rgba(' + color + ', 0)');
-      ctx.fillStyle = grad;
+      ctx.globalAlpha = a * 0.2;
+      ctx.fillStyle = color;
       ctx.beginPath();
-      ctx.arc(px, py, this.radius * 3, 0, Math.PI * 2);
+      ctx.arc(px, py, this.radius * 2.5, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     }
@@ -476,25 +472,23 @@ class Player {
       const range = this._cachedRange * (this.chargedAttack ? 1.4 : 1);
 
       const col = this.chargedAttack ? '255, 200, 80' : '74, 158, 255';
-      const grad = ctx.createRadialGradient(px, py, range * 0.4, px, py, range);
-      grad.addColorStop(0, 'rgba(' + col + ', 0)');
-      grad.addColorStop(0.6, 'rgba(' + col + ', ' + (this.trailAlpha * 0.55) + ')');
-      grad.addColorStop(1, 'rgba(255, 240, 200, 0)');
 
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = this.trailAlpha * 0.35;
+      ctx.fillStyle = 'rgb(' + col + ')';
       ctx.beginPath();
       ctx.moveTo(px, py);
       ctx.arc(px, py, range, startAngle, endAngle);
       ctx.closePath();
-      ctx.fillStyle = grad;
       ctx.fill();
 
+      ctx.globalAlpha = this.trailAlpha * 0.7;
+      ctx.fillStyle = 'rgba(255, 240, 220, 1)';
       ctx.beginPath();
       ctx.arc(px, py, range - 4, startAngle, endAngle);
       ctx.arc(px, py, range - 18, endAngle, startAngle, true);
       ctx.closePath();
-      ctx.fillStyle = 'rgba(255, 240, 220, ' + (this.trailAlpha * 0.5) + ')';
       ctx.fill();
       ctx.restore();
     }

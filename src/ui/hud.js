@@ -32,15 +32,21 @@ class HUD {
     this.muteBtn = document.getElementById('mute-btn');
 
     this.dashIndicator = document.getElementById('dash-indicator');
-    this.dashDotsContainer = document.getElementById('dash-dots');
-    this.dashCooldownFill = document.getElementById('dash-cooldown-fill');
+    this.dashCanvas = document.getElementById('dash-canvas');
+    this.dashCtx = this.dashCanvas.getContext('2d');
+    this.dashCount = document.getElementById('dash-count');
     this.ctrlDash = document.getElementById('ctrl-dash');
     this.ctrlCharge = document.getElementById('ctrl-charge');
-    this._dashDots = [];
+    this.ctrlDashSep = document.getElementById('ctrl-dash-sep');
+    this.ctrlChargeSep = document.getElementById('ctrl-charge-sep');
+
     this._lastCharges = -1;
     this._lastMaxCharges = -1;
+    this._lastRingState = '';
     this._dashVisible = false;
     this._chargeVisible = false;
+    this._dashEnabled = false;
+    this._chargeEnabled = false;
 
     this.onTalentClick = null;
 
@@ -52,9 +58,6 @@ class HUD {
 
     this.dashIndicator.classList.add('hidden');
     this._dashVisible = false;
-
-    if (this.ctrlCharge) this.ctrlCharge.style.display = 'none';
-    if (this.ctrlDash) this.ctrlDash.style.display = 'none';
 
     this._hp = -1;
     this._maxHp = -1;
@@ -128,16 +131,19 @@ class HUD {
       this._level = level;
 
       const canCharge = level >= 3;
-      if (this.ctrlCharge && canCharge !== this._chargeVisible) {
-        this.ctrlCharge.style.display = canCharge ? 'inline-flex' : 'none';
-        this._chargeVisible = canCharge;
+      if (canCharge !== this._chargeEnabled) {
+        this._chargeEnabled = canCharge;
+        this.ctrlCharge.classList.toggle('show', canCharge);
+        this.ctrlChargeSep.classList.toggle('show', canCharge);
       }
     }
   }
 
-  updateDash(player, hasDashAbility) {
-    if (this.ctrlDash) {
-      this.ctrlDash.style.display = hasDashAbility ? 'inline-flex' : 'none';
+    updateDash(player, hasDashAbility) {
+    if (hasDashAbility !== this._dashEnabled) {
+      this._dashEnabled = hasDashAbility;
+      this.ctrlDash.classList.toggle('show', hasDashAbility);
+      this.ctrlDashSep.classList.toggle('show', hasDashAbility);
     }
 
     if (!hasDashAbility) {
@@ -151,46 +157,65 @@ class HUD {
     if (!this._dashVisible) {
       this.dashIndicator.classList.remove('hidden');
       this._dashVisible = true;
+      this._lastCharges = -1;
+      this._lastRingState = '';
     }
 
     const maxCharges = player.maxDashCharges;
     const charges = player.dashCharges;
 
-    if (maxCharges !== this._lastMaxCharges) {
-      this.dashDotsContainer.innerHTML = '';
-      this._dashDots = [];
-      for (let i = 0; i < maxCharges; i++) {
-        const dot = document.createElement('div');
-        dot.className = 'dash-dot empty';
-        this.dashDotsContainer.appendChild(dot);
-        this._dashDots.push(dot);
-      }
-      this._lastMaxCharges = maxCharges;
-      this._lastCharges = -1;
-    }
-
     if (charges !== this._lastCharges) {
-      for (let i = 0; i < this._dashDots.length; i++) {
-        const dot = this._dashDots[i];
-        dot.classList.remove('full', 'empty');
-        if (i < charges) {
-          dot.classList.add('full');
-        } else {
-          dot.classList.add('empty');
-        }
-      }
+      this.dashCount.textContent = charges;
       this._lastCharges = charges;
     }
 
+    let pct = 1;
     if (charges < maxCharges) {
       const remaining = Math.max(0, player.dashRechargeTimer);
-      const pct = Math.max(0, Math.min(100, (1 - remaining / player.dashRechargeTime) * 100));
-      this.dashCooldownFill.style.width = pct + '%';
+      pct = Math.max(0, Math.min(1, 1 - remaining / player.dashRechargeTime));
+    }
+
+    const filled = charges >= maxCharges;
+    const ringState = filled + ':' + pct.toFixed(2);
+    if (ringState === this._lastRingState) return;
+    this._lastRingState = ringState;
+
+    const ctx = this.dashCtx;
+    const W = this.dashCanvas.width;
+    const H = this.dashCanvas.height;
+    const cx = W / 2;
+    const cy = H / 2;
+    const radius = W / 2 - 6;
+
+    ctx.clearRect(0, 0, W, H);
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(10, 18, 32, 0.7)';
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(74, 158, 255, 0.2)';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    if (filled) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(74, 158, 255, 0.75)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
     } else {
-      this.dashCooldownFill.style.width = '100%';
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, -Math.PI / 2, -Math.PI / 2 + pct * Math.PI * 2);
+      ctx.strokeStyle = 'rgba(74, 158, 255, 0.75)';
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      ctx.stroke();
     }
   }
-
+  
   updateSkillMenu(talents, abilities) {
     this.skillPointsEl.textContent = talents.points;
     this.renderTalentTree(talents);

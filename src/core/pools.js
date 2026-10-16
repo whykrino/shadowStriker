@@ -74,35 +74,36 @@ class BulletPool extends ObjectPool {
   }
 
   render(ctx, camX, camY) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < this.active.length; i++) {
       const b = this.active[i];
       const px = b.x - camX;
       const py = b.y - camY;
 
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      const grad = ctx.createRadialGradient(px, py, 0, px, py, 12);
-      grad.addColorStop(0, 'rgba(255, 120, 150, 1)');
-      grad.addColorStop(0.5, 'rgba(255, 50, 90, 0.7)');
-      grad.addColorStop(1, 'rgba(255, 50, 90, 0)');
-      ctx.fillStyle = grad;
+      ctx.fillStyle = 'rgba(255, 90, 120, 0.35)';
       ctx.beginPath();
-      ctx.arc(px, py, 12, 0, Math.PI * 2);
+      ctx.arc(px, py, 10, 0, Math.PI * 2);
       ctx.fill();
-      ctx.restore();
 
-      ctx.fillStyle = '#ffccdd';
+      ctx.fillStyle = 'rgba(255, 140, 170, 0.85)';
       ctx.beginPath();
-      ctx.arc(px, py, 3, 0, Math.PI * 2);
+      ctx.arc(px, py, 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#ffe0ea';
+      ctx.beginPath();
+      ctx.arc(px, py, 2, 0, Math.PI * 2);
       ctx.fill();
     }
+    ctx.restore();
   }
 }
 
 class DamageNumberPool {
   constructor() {
     this.pool = [];
-    for (let i = 0; i < 100; i++) {
+    for (let i = 0; i < 60; i++) {
       this.pool.push({ active: false, x: 0, y: 0, vx: 0, vy: 0, life: 0, value: 0, crit: false, color: '#fff' });
     }
     this.cursor = 0;
@@ -137,18 +138,23 @@ class DamageNumberPool {
   render(ctx, camX, camY) {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    let lastFont = '';
+    let lastAlpha = -1;
+    let lastColor = '';
+
     for (let i = 0; i < this.pool.length; i++) {
       const d = this.pool[i];
       if (!d.active) continue;
       const a = Math.min(1, d.life / 0.5);
-      const size = d.crit ? 18 : 13;
-      ctx.font = 'bold ' + size + 'px monospace';
-      ctx.globalAlpha = a;
-      ctx.strokeStyle = 'rgba(0,0,0,0.9)';
-      ctx.lineWidth = 3;
-      ctx.strokeText(d.value, d.x - camX, d.y - camY);
-      ctx.fillStyle = d.crit ? '#ffdd44' : d.color;
-      ctx.fillText(d.value, d.x - camX, d.y - camY);
+      const size = d.crit ? 16 : 12;
+      const font = 'bold ' + size + 'px monospace';
+      if (font !== lastFont) { ctx.font = font; lastFont = font; }
+
+      const col = d.crit ? '#ffdd44' : d.color;
+      if (col !== lastColor) { ctx.fillStyle = col; lastColor = col; }
+      if (a !== lastAlpha) { ctx.globalAlpha = a; lastAlpha = a; }
+
+      ctx.fillText(d.value, d.x - camX + 1, d.y - camY + 1);
     }
     ctx.globalAlpha = 1;
   }
@@ -201,6 +207,8 @@ class LootPool {
   }
 
   render(ctx, camX, camY) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < this.pool.length; i++) {
       const l = this.pool[i];
       if (!l.active) continue;
@@ -214,27 +222,27 @@ class LootPool {
       if (l.type === 'exp') { color = '#c890ff'; symbol = '✦'; }
       else if (l.type === 'buff') { color = '#ffcc44'; symbol = '⚡'; }
 
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      const grad = ctx.createRadialGradient(px, py, 0, px, py, l.radius * 2.5);
-      grad.addColorStop(0, color + 'cc');
-      grad.addColorStop(0.5, color + '66');
-      grad.addColorStop(1, color + '00');
-      ctx.fillStyle = grad;
-      ctx.fillRect(px - l.radius * 2.5, py - l.radius * 2.5, l.radius * 5, l.radius * 5);
-      ctx.restore();
+      ctx.globalAlpha = 0.35;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(px, py, l.radius * 1.8, 0, Math.PI * 2);
+      ctx.fill();
 
+      ctx.globalAlpha = 1;
       ctx.fillStyle = color;
       ctx.beginPath();
       ctx.arc(px, py, l.radius * (0.8 + pulse * 0.2), 0, Math.PI * 2);
       ctx.fill();
 
+      ctx.globalCompositeOperation = 'source-over';
       ctx.fillStyle = '#05070d';
       ctx.font = 'bold 14px monospace';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(symbol, px, py + 1);
+      ctx.globalCompositeOperation = 'lighter';
     }
+    ctx.restore();
   }
 
   forEachActive(fn) {

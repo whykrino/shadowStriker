@@ -90,6 +90,14 @@ class Monster {
   update(dt, player, zoneManager, damageNumbers, world) {
     if (!this.alive) return;
 
+    const dx0 = player.x - this.x;
+    const dy0 = player.y - this.y;
+    const dist0Sq = dx0 * dx0 + dy0 * dy0;
+
+    if (dist0Sq > 810000 && this.chaseTimer <= 0 && this.frozenTimer <= 0) {
+      return;
+    }
+
     if (this.frozenTimer > 0) {
       this.frozenTimer -= dt;
       this.wobblePhase += dt * 2;
@@ -355,7 +363,8 @@ class Monster {
 
   render(ctx, camX, camY) {
     if (!this.alive) return;
-    if (this.archetype.invisibility && !this.visibleNow) {
+    const inv = this.archetype.invisibility && !this.visibleNow;
+    if (inv) {
       ctx.save();
       ctx.globalAlpha = 0.15;
     }
@@ -371,11 +380,9 @@ class Monster {
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       const al = this.blinkFlash / 0.5;
-      const grad = ctx.createRadialGradient(px, py, 0, px, py, r * 4);
-      grad.addColorStop(0, 'rgba(200, 100, 255, ' + (al * 0.7) + ')');
-      grad.addColorStop(1, 'rgba(200, 100, 255, 0)');
-      ctx.fillStyle = grad;
-      ctx.fillRect(px - r * 4, py - r * 4, r * 8, r * 8);
+      ctx.globalAlpha = al * 0.7;
+      ctx.fillStyle = '#c864ff';
+      ctx.beginPath(); ctx.arc(px, py, r * 2, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
 
@@ -383,25 +390,39 @@ class Monster {
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       const al = this.healFlash / 0.7;
-      const grad = ctx.createRadialGradient(px, py, 0, px, py, r * 3);
-      grad.addColorStop(0, 'rgba(100, 255, 130, ' + (al * 0.6) + ')');
-      grad.addColorStop(1, 'rgba(100, 255, 130, 0)');
-      ctx.fillStyle = grad;
-      ctx.fillRect(px - r * 3, py - r * 3, r * 6, r * 6);
+      ctx.globalAlpha = al * 0.6;
+      ctx.fillStyle = '#64ff82';
+      ctx.beginPath(); ctx.arc(px, py, r * 2, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
-
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    ctx.beginPath();
-    ctx.ellipse(px + 3, py + r * 0.7, r * 0.95, r * 0.35, 0, 0, Math.PI * 2);
-    ctx.fill();
 
     ctx.save();
     ctx.translate(px, py);
     const facingLeft = Math.cos(this.facing) < 0;
     if (facingLeft) ctx.scale(-1, 1);
 
-    ctx.fillStyle = flash ? '#ffffff' : '#040610';
+    if (flash) {
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.4, r * 0.5);
+      ctx.lineTo(-r * 0.9, -r * 0.8);
+      ctx.lineTo(-r * 0.3, -r * 0.35);
+      ctx.lineTo(0, -r * 1.15);
+      ctx.lineTo(r * 0.3, -r * 0.35);
+      ctx.lineTo(r * 0.9, -r * 0.8);
+      ctx.lineTo(r * 0.4, r * 0.5);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 0.8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      if (inv) ctx.restore();
+      return;
+    }
+
+    ctx.fillStyle = '#040610';
     ctx.beginPath();
     ctx.moveTo(-r * 0.4, r * 0.5);
     ctx.lineTo(-r * 0.9, -r * 0.8);
@@ -413,7 +434,7 @@ class Monster {
     ctx.closePath();
     ctx.fill();
 
-    ctx.fillStyle = flash ? '#ffffff' : a.color1;
+    ctx.fillStyle = a.color1;
     ctx.beginPath();
     ctx.moveTo(-r * 0.7, r * 0.4);
     ctx.lineTo(-r * 0.4, -r * 0.55);
@@ -423,7 +444,7 @@ class Monster {
     ctx.closePath();
     ctx.fill();
 
-    ctx.fillStyle = flash ? '#ffffff' : a.color2;
+    ctx.fillStyle = a.color2;
     ctx.beginPath();
     ctx.moveTo(-r * 0.4, r * 0.2);
     ctx.lineTo(0, -r * 0.25);
@@ -431,18 +452,11 @@ class Monster {
     ctx.closePath();
     ctx.fill();
 
-    ctx.fillStyle = flash ? '#ffffff' : a.color3;
+    ctx.fillStyle = a.color3;
     ctx.fillRect(-r * 0.45, -r * 0.3, 4, 3);
     ctx.fillRect(r * 0.15, -r * 0.3, 4, 3);
-
-    if (!flash) {
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.fillStyle = a.color3 + '99';
-      ctx.fillRect(-r * 0.6, -r * 0.4, 6, 6);
-      ctx.fillRect(r * 0.05, -r * 0.4, 6, 6);
-      ctx.restore();
-    }
+    ctx.fillRect(-r * 0.6, -r * 0.4, 5, 5);
+    ctx.fillRect(r * 0.05, -r * 0.4, 5, 5);
 
     if (this.frozenTimer > 0) {
       ctx.strokeStyle = 'rgba(150, 220, 255, 0.8)';
@@ -470,8 +484,6 @@ class Monster {
       }
     }
 
-    if (this.archetype.invisibility && !this.visibleNow) {
-      ctx.restore();
-    }
+    if (inv) ctx.restore();
   }
 }

@@ -45,6 +45,8 @@ class Game {
     this.zones.attachBulletPool(this.bulletPool);
 
     const spawn = this.findSafeSpawn();
+    this.world.buildRuins(spawn.x, spawn.y);
+
     this.player = new Player(spawn.x, spawn.y, this.stats, this.abilities, this.talents);
 
     this.minimap = new Minimap(this.world, this.zones.zones);
@@ -56,7 +58,6 @@ class Game {
     this.renderList = [];
     this._vignette = null;
     this._regenTimer = 0;
-    this._enemySoundTimer = 0;
 
     this.hud.onTalentClick = (id) => {
       if (this.talents.learn(id)) {
@@ -69,7 +70,7 @@ class Game {
 
     this.notifications.info(
       'ДОБРО ПОЖАЛОВАТЬ',
-      'Начни с синей зоны, там безопасно',
+      'Синяя зона слева, там безопасно',
       '◈'
     );
 
@@ -84,31 +85,24 @@ class Game {
 
   findSafeSpawn() {
     const w = this.world;
-    const margin = w.wallThickness + 200;
-    const maxX = w.width - margin;
-    const maxY = w.height - margin;
-    let best = { x: w.width / 2, y: w.height / 2 };
-    let bestDist = -1;
-    for (let i = 0; i < 120; i++) {
-      const x = margin + Math.random() * (maxX - margin);
-      const y = margin + Math.random() * (maxY - margin);
-      let minDistSq = Infinity;
-      for (const zone of this.zones.zones) {
-        const dx = x - zone.x;
-        const dy = y - zone.y;
-        const d2 = dx * dx + dy * dy;
-        if (d2 < minDistSq) minDistSq = d2;
-      }
-      if (minDistSq > bestDist) { bestDist = minDistSq; best = { x, y }; }
+    let safe = null;
+    for (const z of this.zones.zones) {
+      if (z.danger === 'safe') { safe = z; break; }
     }
-    return best;
+    if (!safe) {
+      return { x: w.width / 2, y: w.height / 2 };
+    }
+    return { x: safe.x + safe.radius + 480, y: safe.y };
   }
 
   resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 1);
     this.width = window.innerWidth;
     this.height = window.innerHeight;
-    this.canvas.width = this.width;
-    this.canvas.height = this.height;
+    this.canvas.width = Math.floor(this.width * dpr);
+    this.canvas.height = Math.floor(this.height * dpr);
+    this.canvas.style.width = this.width + 'px';
+    this.canvas.style.height = this.height + 'px';
     this.ctx.imageSmoothingEnabled = false;
     this._vignette = null;
   }
@@ -172,19 +166,17 @@ class Game {
     const mw = this.screenToWorld(this.input.mouseScreenX, this.input.mouseScreenY);
 
     const wasDashing = this.player.dashTimer > 0;
-    if (this.input.consumeClick(dt)) {
+    this.input.consumeClick(dt);
+    const prevAttackTimer = this.player.attackTimer;
+    this.player.update(dt, this.input, this.world, mw.x, mw.y);
+
+    if (prevAttackTimer <= 0 && this.player.attackTimer > 0) {
       this.audio.swordSwing();
     }
-    this.player.update(dt, this.input, this.world, mw.x, mw.y);
 
     if (!wasDashing && this.player.dashTimer > 0) {
       this.audio.dash();
     }
-
-    const mv = this.input.moveVector;
-    const moving = Math.hypot(mv.x, mv.y) > 0.1;
-    this.audio.updatePlayer(dt, moving);
-    this.audio.updateListener(this.player.x, this.player.y);
 
     this.zones.update(dt, this.player, this.damageNumbers);
     this.bulletPool.update(dt);
@@ -246,16 +238,7 @@ class Game {
         p.takeDamage(b.damage);
         if (p.hp < hpBefore) this.audio.playerHurt();
         this.bulletPool.release(b);
-        this.particles.burst(b.x, b.y, 8, '#ff5577', 4);
-      }
-    }
-
-    this._enemySoundTimer -= dt;
-    if (this._enemySoundTimer <= 0 && monsters.length > 0) {
-      this._enemySoundTimer = 3 + Math.random() * 3;
-      for (let i = 0; i < Math.min(3, monsters.length); i++) {
-        const m = monsters[Math.floor(Math.random() * monsters.length)];
-        if (m.alive) this.audio.enemyRoar(m.x, m.y, m.archetypeId);
+        this.particles.burst(b.x, b.y, 4, '#ff5577', 3);
       }
     }
 
@@ -300,29 +283,23 @@ class Game {
 
     const range = p._cachedRange * (p.chargedAttack ? 1.4 : 1);
     const t = this.talents.effects;
-    let damage = p._cachedDamage;
+    let damage = p.damage;
 
-    if (p.chargedAttack) damage = Math.round(damage * 2.5);
+    if (p.chargedAttack) damage = damage * 2.7;
 
     if (t.berserk && p.hp / this.stats.maxHp < 0.4) {
-      damage = Math.round(damage * 1.3);
+      damage = damage * 1.3;
     }
     if (p.buffType === 'damage' && p.buffTimer > 0) {
-      damage = Math.round(damage * 1.5);
+      damage = damage * 1.5;
     }
 
     const isDouble = t.doubleStrike > 0 && Math.random() < t.doubleStrike;
-    if (isDouble) damage = Math.round(damage * 0.7);
+    if (isDouble) damage = damage * 0.7;
 
     const isSpin = p.isSpinAttack() || p.chargedAttack;
     const arc = isSpin ? Math.PI * 2 : p.attackArc;
     const minDot = Math.cos(arc / 2);
-
-    this.particles.burst(
-      p.x + dirX * range * 0.55,
-      p.y + dirY * range * 0.55,
-      8, p.chargedAttack ? '#ffdd44' : '#4a9eff', 4
-    );
 
     const monsters = this.zones.monsters;
     let hitAny = false;
@@ -341,12 +318,16 @@ class Game {
         if (dot < minDot) continue;
       }
 
-      const angleToMonster = Math.atan2(dy, dx);
-      const facingToMonster = Math.abs(Utils.angleLerp(p.facing, angleToMonster, 1));
-      const fromBehind = facingToMonster > Math.PI * 0.6;
+      const mobToPlayerX = p.x - m.x;
+      const mobToPlayerY = p.y - m.y;
+      const mpLen = Math.hypot(mobToPlayerX, mobToPlayerY) || 1;
+      const mobFacingX = Math.cos(m.facing);
+      const mobFacingY = Math.sin(m.facing);
+      const facingDot = (mobToPlayerX * mobFacingX + mobToPlayerY * mobFacingY) / mpLen;
+      const fromBehind = facingDot < -0.5;
 
       let dmg = damage;
-      if (fromBehind) dmg = Math.round(dmg * 2);
+      if (fromBehind) dmg = dmg * 2;
 
       if (t.execute > 0 && m.hp / m.maxHp < t.execute) {
         m.hp = 0;
@@ -372,13 +353,6 @@ class Game {
 
       if (t.freeze && m.alive) m.freeze(1.0);
       if (t.lifesteal > 0) p.heal(damage * t.lifesteal);
-
-      this.particles.burst(
-        m.x, m.y,
-        m.alive ? 7 : 16,
-        m.alive ? '#4a9eff' : '#8fc9ff',
-        m.alive ? 3 : 6
-      );
 
       if (!m.archetype.knockbackResist || Math.random() > m.archetype.knockbackResist) {
         const nx = dx / (d || 1);
@@ -439,23 +413,17 @@ class Game {
 
     this.world.renderGround(ctx, camX, camY, W, H);
     this.world.renderZoneOverlay(ctx, camX, camY, this.zones.zones);
+    this.world.renderProps(ctx, camX, camY, W, H);
 
     const list = this.renderList;
     list.length = 0;
 
-    const padX = 100;
-    const padY = 150;
+    const padX = 120;
+    const padY = 180;
     const minX = camX - padX;
     const maxX = camX + W + padX;
     const minY = camY - padY;
     const maxY = camY + H + padY;
-
-    const props = this.world.props;
-    for (let i = 0; i < props.length; i++) {
-      const p = props[i];
-      if (p.x < minX || p.x > maxX || p.y < minY || p.y > maxY) continue;
-      list.push(p);
-    }
 
     const mons = this.zones.monsters;
     for (let i = 0; i < mons.length; i++) {
@@ -476,17 +444,10 @@ class Game {
 
     list.sort((a, b) => a.y - b.y);
 
-    const now = performance.now() * 0.001;
-
     for (let i = 0; i < list.length; i++) {
       const e = list[i];
       if (e === this.player) { e.render(ctx, camX, camY); continue; }
-      if (e.type === 'deadTree') this.world.renderDeadTree(ctx, e.x - camX, e.y - camY, e, now);
-      else if (e.type === 'spikeRock') this.world.renderSpikeRock(ctx, e.x - camX, e.y - camY, e);
-      else if (e.type === 'shrub') this.world.renderShrub(ctx, e.x - camX, e.y - camY, e, now);
-      else if (e.type === 'grass') this.world.renderGrass(ctx, e.x - camX, e.y - camY, e, now);
-      else if (e.type === 'crystal') this.world.renderCrystal(ctx, e.x - camX, e.y - camY, e, now);
-      else if (e.layers !== undefined && e.seed !== undefined) this.world.renderMountain(ctx, e.x - camX, e.y - camY, e);
+      if (e.layers !== undefined && e.seed !== undefined) this.world.renderMountain(ctx, e.x - camX, e.y - camY, e);
       else if (e.alive !== undefined && e.archetypeId) e.render(ctx, camX, camY);
     }
 

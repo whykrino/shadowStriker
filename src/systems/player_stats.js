@@ -40,8 +40,8 @@ class PlayerStats {
     return true;
   }
 
-  get maxHp() { return 100 + this.vit * 10; }
-  get damage() { return 40 + this.str * 6; }
+  get maxHp() { return 100 + this.vit * 10 + this.level * 5; }
+  get damage() { return 3 + this.str * 2 + this.level * 2; }
   get speed() { return 225 + this.agi * 6; }
   get dashSpeed() { return 680 + this.agi * 12; }
   get attackRange() { return 105 + this.int * 3; }

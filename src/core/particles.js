@@ -2,7 +2,7 @@
 
 class ParticleSystem {
   constructor() {
-    this.max = 240;
+    this.max = 120;
     this.pool = new Array(this.max);
     for (let i = 0; i < this.max; i++) {
       this.pool[i] = { a: false, x: 0, y: 0, vx: 0, vy: 0, l: 0, ml: 1, c: '#4a9eff', s: 3 };
@@ -11,6 +11,7 @@ class ParticleSystem {
   }
 
   burst(x, y, count, color, power) {
+    if (count > 6) count = 6;
     for (let i = 0; i < count; i++) {
       const p = this.pool[this.cursor];
       this.cursor = (this.cursor + 1) % this.max;

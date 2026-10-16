@@ -1,7 +1,5 @@
 'use strict';
 
-const ZONE_SPAWN_ACTIVATE_DIST = 1200;
-
 const ZONE_DANGER = {
   safe: { color: '#4a9eff', recommendedLevel: 1 },
   mid: { color: '#b070ff', recommendedLevel: 5 },
@@ -19,7 +17,7 @@ class Zone {
     this.recommendedLevel = ZONE_DANGER[danger].recommendedLevel;
     this.spawnList = spawnList;
     this.targetCount = spawnList.length;
-    this.spawnInterval = danger === 'hard' ? 5.0 : danger === 'mid' ? 3.5 : 2.5;
+    this.spawnInterval = danger === 'hard' ? 4.0 : danger === 'mid' ? 3.5 : 2.5;
   }
 
   contains(x, y) {
@@ -38,27 +36,14 @@ class ZoneManager {
     this.world = world;
     this.playerLevel = 1;
 
-    const ix0 = world.wallThickness + 200;
-    const ix1 = world.width - world.wallThickness - 200;
-    const iy0 = world.wallThickness + 200;
-    const iy1 = world.height - world.wallThickness - 200;
-    const cx = (ix0 + ix1) / 2;
-    const cy = (iy0 + iy1) / 2;
+    this.zones.push(new Zone(1000, 1100, 500, 'safe', 'Луга слизней',
+      ['slime', 'slime', 'slime', 'slime', 'slime', 'slime', 'slime']));
 
-    this.zones.push(new Zone(ix0 + 300, iy0 + 300, 280, 'safe', 'Луга слизней',
-      ['slime', 'slime', 'slime', 'slime', 'slime', 'slime', 'tank']));
+    this.zones.push(new Zone(3600, 1600, 520, 'mid', 'Пепелище',
+      ['tank', 'tank', 'ranger', 'ghost', 'worm', 'shaman', 'flyer', 'kamikaze', 'assassin']));
 
-    this.zones.push(new Zone(ix1 - 300, iy0 + 300, 300, 'mid', 'Пепелище',
-      ['tank', 'ranger', 'ranger', 'slime', 'slime', 'kamikaze', 'kamikaze']));
-    this.zones.push(new Zone(ix0 + 300, iy1 - 300, 300, 'mid', 'Логово демонов',
-      ['tank', 'tank', 'ranger', 'summoner', 'slime', 'kamikaze', 'kamikaze']));
-    this.zones.push(new Zone(cx, cy, 340, 'mid', 'Арена',
-      ['assassin', 'ranger', 'ranger', 'tank', 'summoner', 'kamikaze', 'kamikaze']));
-
-    this.zones.push(new Zone(ix1 - 350, iy1 - 350, 340, 'hard', 'Проклятый сад',
-      ['assassin', 'assassin', 'summoner', 'summoner', 'kamikaze', 'kamikaze', 'kamikaze']));
-    this.zones.push(new Zone(cx, iy0 + 200, 300, 'hard', 'Обитель теней',
-      ['boss']));
+    this.zones.push(new Zone(6100, 1500, 520, 'hard', 'Проклятый сад',
+      ['assassin', 'assassin', 'ghost', 'sentinel', 'shaman', 'flyer', 'kamikaze', 'worm', 'summoner']));
 
     this.spawnTimers = new Float32Array(this.zones.length);
     for (let i = 0; i < this.zones.length; i++) {
@@ -98,7 +83,7 @@ class ZoneManager {
       y = forcedY;
     } else {
       const a = Math.random() * Math.PI * 2;
-      const r = Math.sqrt(Math.random()) * zone.radius * 0.75;
+      const r = Math.sqrt(Math.random()) * zone.radius * 0.8;
       x = zone.x + Math.cos(a) * r;
       y = zone.y + Math.sin(a) * r;
     }
@@ -110,17 +95,9 @@ class ZoneManager {
 
   update(dt, player, damageNumbers) {
     const zones = this.zones;
-    const px = player.x;
-    const py = player.y;
-    const activateD2 = ZONE_SPAWN_ACTIVATE_DIST * ZONE_SPAWN_ACTIVATE_DIST;
 
     for (let i = 0; i < zones.length; i++) {
       const zone = zones[i];
-
-      const zdx = zone.x - px;
-      const zdy = zone.y - py;
-      const zd2 = zdx * zdx + zdy * zdy;
-      if (zd2 > activateD2) continue;
 
       let count = 0;
       for (let j = 0; j < this.monsters.length; j++) {
@@ -139,14 +116,15 @@ class ZoneManager {
       }
     }
 
-    for (let i = 0; i < this.monsters.length; i++) {
-      this.monsters[i].update(dt, player, this, damageNumbers, this.world);
+    const monsters = this.monsters;
+    for (let i = 0; i < monsters.length; i++) {
+      monsters[i].update(dt, player, this, damageNumbers, this.world);
     }
 
-    for (let i = this.monsters.length - 1; i >= 0; i--) {
-      if (!this.monsters[i].alive) {
-        this.pool.release(this.monsters[i]);
-        this.monsters.splice(i, 1);
+    for (let i = monsters.length - 1; i >= 0; i--) {
+      if (!monsters[i].alive) {
+        this.pool.release(monsters[i]);
+        monsters.splice(i, 1);
       }
     }
   }
