@@ -39,6 +39,8 @@ class HUD {
     this.ctrlCharge = document.getElementById('ctrl-charge');
     this.ctrlDashSep = document.getElementById('ctrl-dash-sep');
     this.ctrlChargeSep = document.getElementById('ctrl-charge-sep');
+    this.ctrlSpin = document.getElementById('ctrl-spin');
+    this.ctrlSpinSep = document.getElementById('ctrl-spin-sep');
 
     this._lastCharges = -1;
     this._lastMaxCharges = -1;
@@ -136,6 +138,11 @@ class HUD {
         this.ctrlCharge.classList.toggle('show', canCharge);
         this.ctrlChargeSep.classList.toggle('show', canCharge);
       }
+      const canSpin = level >= 4;
+      if (this.ctrlSpin) {
+        this.ctrlSpin.classList.toggle('show', canSpin);
+        this.ctrlSpinSep.classList.toggle('show', canSpin);
+      }      
     }
   }
 

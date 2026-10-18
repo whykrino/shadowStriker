@@ -67,6 +67,9 @@ class Game {
       }
     };
 
+    this.hud.update(this.player.hp, this.stats.maxHp, this.stats.exp, this.stats.expToNext, this.stats.level);
+    this.hud.updateDash(this.player, this.abilities.has('dash'));
+
     this.notifications.info(
       'ДОБРО ПОЖАЛОВАТЬ',
       'Синяя зона слева, там безопасно',
@@ -170,11 +173,7 @@ class Game {
     const wasDashing = this.player.dashTimer > 0;
     this.input.consumeClick(dt);
     const prevAttackTimer = this.player.attackTimer;
-    this.player.update(dt, this.input, this.world, mw.x, mw.y);
-
-    if (prevAttackTimer <= 0 && this.player.attackTimer > 0) {
-      this.audio.swordSwing();
-    }
+    this.player.update(dt, this.input, this.world, mw.x, mw.y, this.audio);
 
     if (!wasDashing && this.player.dashTimer > 0) {
       this.audio.dash();
@@ -220,7 +219,7 @@ class Game {
       const range = m.radius + p.radius;
       if (d2 < range * range && m.attackCooldown <= 0) {
         const hpBefore = p.hp;
-        p.takeDamage(m.damage);
+        p.takeDamage(m.damage, true);
         if (p.hp < hpBefore) this.audio.playerHurt();
         m.attackCooldown = m.archetype.attackCooldown || 1.0;
         const d = Math.sqrt(d2) || 1;
@@ -237,7 +236,7 @@ class Game {
       const r = b.radius + p.radius;
       if (dx * dx + dy * dy < r * r) {
         const hpBefore = p.hp;
-        p.takeDamage(b.damage);
+        p.takeDamage(b.damage, false);
         if (p.hp < hpBefore) this.audio.playerHurt();
         this.bulletPool.release(b);
         this.particles.burst(b.x, b.y, 4, '#ff5577', 3);
@@ -287,7 +286,13 @@ class Game {
     const t = this.talents.effects;
     let damage = p.damage;
 
-    if (p.chargedAttack) damage = damage * 2.7;
+    if (p.chargedAttack) {
+      const chargeBonus = 1.0 + Math.min(1.6, p.chargeTime) * 1.5;
+      damage = damage * chargeBonus;
+    }
+    if (p._isSpinAttackActive) {
+      damage = damage * 1.1;
+    }
 
     if (t.berserk && p.hp / this.stats.maxHp < 0.4) {
       damage = damage * 1.3;
@@ -302,6 +307,12 @@ class Game {
     const isSpin = p.isSpinAttack() || p.chargedAttack;
     const arc = isSpin ? Math.PI * 2 : p.attackArc;
     const minDot = Math.cos(arc / 2);
+
+    this.particles.burst(
+      p.x + dirX * range * 0.55,
+      p.y + dirY * range * 0.55,
+      8, p.chargedAttack ? '#ffdd44' : '#4a9eff', 4
+    );
 
     const monsters = this.zones.monsters;
     let hitAny = false;
@@ -363,6 +374,8 @@ class Game {
         m.y += ny * 22;
       }
     }
+
+    p.chargeTime = 0;
 
     if (hitAny) this.audio.hitEnemy();
   }

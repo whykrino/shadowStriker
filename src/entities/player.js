@@ -17,7 +17,7 @@ class Player {
 
     this.attackTimer = 0;
     this.attackCooldown = 0;
-    this.attackDuration = 0.4;
+    this.attackDuration = 0.35;
     this.attackArc = Math.PI * 1.35;
     this.attackHitApplied = false;
     this.attackQueued = false;
@@ -33,6 +33,11 @@ class Player {
 
     this._isSpinAttackActive = false;
     this._spinVisualAngle = 0;
+    this._swingSoundPlayed = false;
+
+    this.isBlocking = false;
+    this.blockCooldown = 0;
+    this.blockTimer = 0;
 
     this.dashTimer = 0;
     this.dashCooldown = 0;
@@ -97,8 +102,20 @@ class Player {
     this.hp = Math.min(this.hp, this._cachedMaxHp);
   }
 
-  takeDamage(amount) {
+  takeDamage(amount, isMelee) {
     if (this.invulnTimer > 0 || !this.alive) return;
+
+    if (this.isBlocking && isMelee && this.blockCooldown <= 0) {
+      const blockCap = 10 + this.stats.level * 2;
+      if (amount <= blockCap) {
+        return;
+      } else {
+        amount -= blockCap;
+        this.blockCooldown = 1.5;
+        this.isBlocking = false;
+      }
+    }
+
     const t = this.talents.effects;
     let dmg = amount * (1 - t.damageResist);
 
@@ -138,10 +155,11 @@ class Player {
     if (this.attackCooldown > 0) { this.attackQueued = true; return; }
     
     this.attackTimer = this.attackDuration;
-    this.attackCooldown = charged ? 1.2 : 0.4;
+    this.attackCooldown = charged ? 0.35 : 0.35;
     this.attackHitApplied = false;
     this.attackQueued = false;
     this.chargedAttack = !!charged;
+    this._swingSoundPlayed = false;
     this.spinCounter++;
   }
 
@@ -151,12 +169,13 @@ class Player {
     if (this.attackTimer > 0) return false;
     if (this.attackCooldown > 0) return false;
     
-    this.attackTimer = 0.65;
-    this.attackDuration = 0.65;
-    this.attackCooldown = 0.9;
+    this.attackTimer = 0.55;
+    this.attackDuration = 0.55;
+    this.attackCooldown = 0.4;
     this.attackArc = Math.PI * 2;
     this.attackHitApplied = false;
     this.chargedAttack = false;
+    this._swingSoundPlayed = false;
     this._isSpinAttackActive = true;
     this._spinVisualAngle = 0;
     return true;
@@ -175,8 +194,9 @@ class Player {
     this.targetFacing = Math.atan2(dy, dx);
   }
 
-  update(dt, input, world, mouseWorldX, mouseWorldY) {
+  update(dt, input, world, mouseWorldX, mouseWorldY, audio) {
     if (!this.alive) return;
+    this.audio = audio;
 
     this.attackTimer = Math.max(0, this.attackTimer - dt);
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
@@ -185,16 +205,25 @@ class Player {
     this.hitShake = Math.max(0, this.hitShake - dt);
     this.levelUpFlash = Math.max(0, this.levelUpFlash - dt);
     this.damageFlash = Math.max(0, this.damageFlash - dt);
+    this.blockCooldown = Math.max(0, this.blockCooldown - dt);
+
+    if (this.attackTimer > 0) {
+      const p = 1 - this.attackTimer / this.attackDuration;
+      if (p >= 0.15 && !this._swingSoundPlayed) {
+        this.audio.swordSwing();
+        this._swingSoundPlayed = true;
+      }
+    }
 
     if (this.attackTimer <= 0 && this._isSpinAttackActive) {
       this._isSpinAttackActive = false;
       this.attackArc = Math.PI * 1.35;
-      this.attackDuration = 0.4;
+      this.attackDuration = 0.35;
     }
 
     if (this._isSpinAttackActive && this.attackTimer > 0) {
       const p = 1 - this.attackTimer / this.attackDuration;
-      const spinPhase = Math.min(1, p / 0.75);
+      const spinPhase = Math.min(1, p / 0.85);
       this._spinVisualAngle = spinPhase * Math.PI * 2;
     }
 
@@ -216,49 +245,55 @@ class Player {
     const spaceJustPressed = spaceDown && !this._prevSpaceDown;
     const spaceJustReleased = !spaceDown && this._prevSpaceDown;
 
+    if (input.isDown('KeyT') && this.abilities.has('spin')) {
+      this.startSpinAttack();
+    }
+
+    this.isBlocking = input.mouseRightDown && this.blockCooldown <= 0 && this.attackTimer <= 0;
+    if (this.isBlocking) {
+      this.blockTimer += dt;
+    } else {
+      this.blockTimer = 0;
+    }
+
     if (canCharge) {
-      if (spaceJustPressed && this.attackTimer <= 0) {
+      if (spaceJustPressed && this.attackTimer <= 0 && !this.isBlocking) {
         this.isCharging = true;
         this.chargeTime = 0;
-        this.chargeReady = false;
       }
 
       if (this.isCharging && spaceDown) {
         this.chargeTime += dt;
-
-        if (this.chargeTime >= this.chargeMax) {
-          this.chargeReady = true;
-        }
-
         if (this.chargeTime >= this.chargeHardCap) {
           this.isCharging = false;
-          const charged = this.chargeReady;
+          this.attackTimer = this.attackDuration;
+          this.attackCooldown = 0.35;
+          this.attackHitApplied = false;
+          this.chargedAttack = true;
+          this._swingSoundPlayed = false;
+          this.spinCounter++;
           this.chargeTime = 0;
-          this.chargeReady = false;
-          this.startAttack(charged);
         }
       }
 
       if (this.isCharging && spaceJustReleased) {
-        const charged = this.chargeReady;
         this.isCharging = false;
-        this.chargeTime = 0;
-        this.chargeReady = false;
-        this.startAttack(charged);
+        this.attackTimer = this.attackDuration;
+        this.attackCooldown = 0.35;
+        this.attackHitApplied = false;
+        this.chargedAttack = true;
+        this._swingSoundPlayed = false;
+        this.spinCounter++;
       }
     }
 
     this._prevSpaceDown = spaceDown;
 
-    if (input.mouseDown) {
+    if (input.mouseDown && !this.isBlocking) {
       this.startAttack(false);
     } else if (this.attackQueued && this.attackCooldown <= 0 && this.attackTimer <= 0) {
       this.attackQueued = false;
       this.startAttack(false);
-    }
-
-    if (input.consumeRightClick(dt)) {
-      this.startSpinAttack();
     }
 
     const mv = input.moveVector;
@@ -278,7 +313,8 @@ class Player {
         && input.consumeDash()
         && this.dashTimer <= 0
         && this.dashCharges > 0
-        && mag > 0) {
+        && mag > 0
+        && !this.isBlocking) {
       this.dashCharges--;
       this.dashTimer = this.dashDuration;
       this.invulnTimer = Math.max(this.invulnTimer, this.dashDuration + 0.1);
@@ -294,7 +330,7 @@ class Player {
     }
 
     let vx = 0, vy = 0;
-    if (mag > 0 && !this._isSpinAttackActive) {
+    if (mag > 0 && !this._isSpinAttackActive && !this.isBlocking) {
       const nx = mv.x / mag;
       const ny = mv.y / mag;
       let spd = this.dashTimer > 0 ? this._cachedDash : this._cachedSpeed;
@@ -356,18 +392,21 @@ class Player {
     let rElbowX = 10;
     let rElbowY = 4;
 
-    if (this.attackTimer > 0) {
+    if (this.isBlocking) {
+      handX = 10;
+      handY = -8;
+      swordAngle = -Math.PI * 0.5;
+    } else if (this.attackTimer > 0) {
       const p = 1 - this.attackTimer / this.attackDuration;
 
       if (this._isSpinAttackActive) {
-        if (p < 0.75) {
+        if (p < 0.85) {
           handX = 20;
           handY = 2;
           swordAngle = -Math.PI * 0.32;
         } else {
-          const t = (p - 0.75) / 0.25;
+          const t = (p - 0.85) / 0.15;
           const ease = 1 - Math.pow(1 - t, 3);
-          
           handX = Utils.lerp(20, 10, ease);
           handY = Utils.lerp(2, -10, ease);
           swordAngle = Utils.lerp(-Math.PI * 0.32, -Math.PI * 0.5, ease);
@@ -426,11 +465,26 @@ class Player {
       ctx.restore();
     }
 
+    if (this.isBlocking) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const pulse = Math.sin(this.blockTimer * 10) * 0.2 + 0.8;
+      const grad = ctx.createRadialGradient(px, py, 0, px, py, 40);
+      grad.addColorStop(0, 'rgba(74, 158, 255, 0)');
+      grad.addColorStop(0.6, 'rgba(74, 158, 255, ' + (0.15 * pulse) + ')');
+      grad.addColorStop(1, 'rgba(74, 158, 255, 0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(px, py, 40, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
     if (this.isCharging) {
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      const a = Math.min(1, this.chargeTime / this.chargeMax);
-      const r = 30 + a * 20;
+      const a = Math.min(1, this.chargeTime / this.chargeHardCap);
+      const r = 30 + a * 25;
       const col = this.chargeReady ? '255, 220, 80' : '74, 158, 255';
       ctx.globalAlpha = 0.3 * a;
       ctx.fillStyle = 'rgb(' + col + ')';
@@ -498,7 +552,7 @@ class Player {
 
       if (this._isSpinAttackActive) {
         const p = 1 - this.attackTimer / this.attackDuration;
-        if (p < 0.75) {
+        if (p < 0.85) {
           startAngle = this.targetFacing - 0.5;
           endAngle = this.facing + 0.5;
         } else {
@@ -550,7 +604,7 @@ class Player {
     
     if (this._isSpinAttackActive) {
       const p = 1 - this.attackTimer / this.attackDuration;
-      const crouch = Math.sin(Math.min(1, p / 0.75) * Math.PI) * 6;
+      const crouch = Math.sin(Math.min(1, p / 0.85) * Math.PI) * 6;
       this._renderCharacter(ctx, crouch);
     } else {
       this._renderCharacter(ctx, 0);
