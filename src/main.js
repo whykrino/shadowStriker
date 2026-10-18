@@ -56,7 +56,6 @@ class Game {
 
     this.running = true;
     this.renderList = [];
-    this._vignette = null;
     this._regenTimer = 0;
 
     this.hud.onTalentClick = (id) => {
@@ -104,7 +103,6 @@ class Game {
     this.canvas.style.width = this.width + 'px';
     this.canvas.style.height = this.height + 'px';
     this.ctx.imageSmoothingEnabled = false;
-    this._vignette = null;
   }
 
   updateCamera(dt) {
@@ -151,14 +149,18 @@ class Game {
         this.hud.toggleAudioMenu(false);
       }
     }
+    if (this.input.wasPressed('KeyM')) {
+      this.minimap.toggleFull();
+    }
     if (this.input.wasPressed('Escape')) {
       this.hud.toggleSkillMenu(false);
       this.hud.toggleAudioMenu(false);
       this.codex.toggle(false);
+      if (this.minimap.fullMapOpen) this.minimap.toggleFull();
     }
 
     if (!this.running) { this.input.endFrame(); return; }
-    if (this.hud.isSkillMenuOpen() || this.hud.isAudioMenuOpen() || this.codex.isOpen()) {
+    if (this.hud.isSkillMenuOpen() || this.hud.isAudioMenuOpen() || this.codex.isOpen() || this.minimap.fullMapOpen) {
       this.input.endFrame();
       return;
     }
@@ -413,7 +415,6 @@ class Game {
 
     this.world.renderGround(ctx, camX, camY, W, H);
     this.world.renderZoneOverlay(ctx, camX, camY, this.zones.zones);
-    this.world.renderProps(ctx, camX, camY, W, H);
 
     const list = this.renderList;
     list.length = 0;
@@ -425,6 +426,14 @@ class Game {
     const minY = camY - padY;
     const maxY = camY + H + padY;
 
+    const props = this.world.props;
+    for (let i = 0; i < props.length; i++) {
+      const p = props[i];
+      if (p.type !== 'tree' && p.type !== 'spikeRock') continue;
+      if (p.x < minX || p.x > maxX || p.y < minY || p.y > maxY) continue;
+      list.push(p);
+    }
+
     const mons = this.zones.monsters;
     for (let i = 0; i < mons.length; i++) {
       const m = mons[i];
@@ -435,27 +444,25 @@ class Game {
 
     list.push(this.player);
 
-    const mountains = this.world.mountains;
-    for (let i = 0; i < mountains.length; i++) {
-      const m = mountains[i];
-      if (m.x < minX || m.x > maxX || m.y < minY || m.y > maxY) continue;
-      list.push(m);
-    }
-
     list.sort((a, b) => a.y - b.y);
 
     for (let i = 0; i < list.length; i++) {
       const e = list[i];
-      if (e === this.player) { e.render(ctx, camX, camY); continue; }
-      if (e.layers !== undefined && e.seed !== undefined) this.world.renderMountain(ctx, e.x - camX, e.y - camY, e);
-      else if (e.alive !== undefined && e.archetypeId) e.render(ctx, camX, camY);
+      if (e === this.player) {
+        e.render(ctx, camX, camY);
+      } else if (e.type === 'tree') {
+        this.world.renderTree(ctx, e.x - camX, e.y - camY, e);
+      } else if (e.type === 'spikeRock') {
+        this.world.renderSpikeRock(ctx, e.x - camX, e.y - camY, e);
+      } else if (e.alive !== undefined && e.archetypeId) {
+        e.render(ctx, camX, camY);
+      }
     }
 
     this.bulletPool.render(ctx, camX, camY);
     this.lootPool.render(ctx, camX, camY);
     this.particles.render(ctx, camX, camY);
     this.damageNumbers.render(ctx, camX, camY);
-    this.renderVignette(ctx);
     this.minimap.render(ctx, this.player, this.zones.monsters, W, H, this.stats.level);
 
     if (this.input.mouseScreenX > 0) {
@@ -471,20 +478,6 @@ class Game {
       ctx.fill();
       ctx.restore();
     }
-  }
-
-  renderVignette(ctx) {
-    if (!this._vignette) {
-      const grad = ctx.createRadialGradient(
-        this.width / 2, this.height / 2, Math.min(this.width, this.height) * 0.35,
-        this.width / 2, this.height / 2, Math.max(this.width, this.height) * 0.75
-      );
-      grad.addColorStop(0, 'rgba(5, 8, 18, 0)');
-      grad.addColorStop(1, 'rgba(5, 8, 18, 0.7)');
-      this._vignette = grad;
-    }
-    ctx.fillStyle = this._vignette;
-    ctx.fillRect(0, 0, this.width, this.height);
   }
 
   loop(time) {

@@ -5,20 +5,19 @@ const MAP_COLS = 84;
 const MAP_ROWS = 36;
 const WALL_THICKNESS = 3;
 const COLLISION_CELL = 128;
-const PROP_TILE = 512;
 
 const C = {
-  groundBase: '#0e1520',
-  groundMid: '#16202e',
-  groundHigh: '#1e2c3e',
-  rockDark: '#1a2230',
-  rockMid: '#2a3444',
-  rockLight: '#3c4a5e',
-  rockHighlight: '#6a7b92',
-  treeDark: '#0a0e18',
-  treeMid: '#141c2a',
-  treeEdge: '#243244',
-  shadow: 'rgba(0, 0, 0, 0.55)',
+  groundBase: '#080c14',
+  groundMid: '#0d141e',
+  groundHigh: '#162436',
+  rockDark: '#121a26',
+  rockMid: '#1e2a3a',
+  rockLight: '#2a384c',
+  rockHighlight: '#425872',
+  treeDark: '#05080e',
+  treeMid: '#0e1824',
+  treeEdge: '#1e3a2e',
+  shadow: 'rgba(0, 0, 0, 0.65)',
   blueAccent: '#4a9eff',
 };
 
@@ -30,68 +29,92 @@ class World {
     this.props = [];
     this.mountains = [];
     this.ruins = [];
-    this.groundPattern = null;
+    this.paths = [];
+    this.mapCanvas = null;
     this.collisionGrid = null;
     this.gridCols = 0;
     this.gridRows = 0;
     this._collideFrame = 0;
-    this.propTiles = new Map();
-    this.propTilesCols = 0;
-    this.propTilesRows = 0;
+    this.zones = [];
+    this.treeSprites = [];
+    this._dashOffset = 0;
+  }
+
+  initWorld(zones) {
+    this.zones = zones;
+    this.generatePaths();
     this.generateProps();
     this.generateMountains();
     this.buildCollisionList();
-    this.buildPropTiles();
+    this.buildTreeSprites();
+    this.buildMapCanvas();
   }
 
-  buildGroundPattern() {
-    const c = document.createElement('canvas');
-    c.width = 256;
-    c.height = 256;
-    const ctx = c.getContext('2d');
+  generatePaths() {
+    this.paths = [];
+    if (!this.zones || this.zones.length < 2) return;
 
-    ctx.fillStyle = '#0e1520';
-    ctx.fillRect(0, 0, 256, 256);
+    const spawn = this.zones[0];
+    const addPath = (p1, p2, width) => {
+      const pts = [];
+      const dx = p2.x - p1.x;
+      const dy = p2.y - p1.y;
+      const dist = Math.hypot(dx, dy);
+      const steps = Math.ceil(dist / 40);
+      const wave = Math.random() * 100;
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const x = p1.x + dx * t + Math.sin(t * Math.PI * 3 + wave) * 60 * (1 - Math.abs(t - 0.5) * 2);
+        const y = p1.y + dy * t + Math.cos(t * Math.PI * 3 + wave) * 60 * (1 - Math.abs(t - 0.5) * 2);
+        pts.push({ x, y });
+      }
+      this.paths.push({ points: pts, width });
+    };
 
-    for (let i = 0; i < 400; i++) {
-      const x = Math.random() * 256;
-      const y = Math.random() * 256;
-      const r = Math.random() * 30 + 5;
-      const shade = Math.random();
-      if (shade < 0.35) ctx.fillStyle = 'rgba(20, 30, 45, 0.6)';
-      else if (shade < 0.7) ctx.fillStyle = 'rgba(30, 44, 62, 0.5)';
-      else ctx.fillStyle = 'rgba(14, 21, 32, 0.7)';
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fill();
+    for (let i = 1; i < this.zones.length; i++) {
+      const z = this.zones[i];
+      addPath({ x: spawn.x, y: spawn.y }, { x: z.x, y: z.y }, 110);
     }
-
-    for (let i = 0; i < 300; i++) {
-      const x = Math.random() * 256;
-      const y = Math.random() * 256;
-      const r = Math.random() * 2 + 0.5;
-      const g = 60 + Math.random() * 40 | 0;
-      const b = 90 + Math.random() * 40 | 0;
-      ctx.fillStyle = 'rgba(' + g + ', ' + (g + 10) + ', ' + b + ', 0.7)';
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fill();
+    for (let i = 1; i < this.zones.length - 1; i++) {
+      addPath({ x: this.zones[i].x, y: this.zones[i].y }, { x: this.zones[i+1].x, y: this.zones[i+1].y }, 90);
     }
+  }
 
-    for (let i = 0; i < 600; i++) {
-      const x = Math.random() * 256;
-      const y = Math.random() * 256;
-      ctx.strokeStyle = Math.random() > 0.5
-        ? 'rgba(30, 60, 50, 0.6)'
-        : 'rgba(20, 40, 35, 0.6)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(x + (Math.random() - 0.5) * 3, y - Math.random() * 4);
-      ctx.stroke();
+  isInsidePath(x, y, margin) {
+    for (let i = 0; i < this.paths.length; i++) {
+      const p = this.paths[i];
+      const pts = p.points;
+      for (let j = 0; j < pts.length - 1; j++) {
+        const ax = pts[j].x;
+        const ay = pts[j].y;
+        const bx = pts[j+1].x;
+        const by = pts[j+1].y;
+        const dx = bx - ax;
+        const dy = by - ay;
+        const lenSq = dx * dx + dy * dy;
+        if (lenSq === 0) continue;
+        let t = ((x - ax) * dx + (y - ay) * dy) / lenSq;
+        t = Math.max(0, Math.min(1, t));
+        const cx = ax + t * dx;
+        const cy = ay + t * dy;
+        const distSq = (x - cx) * (x - cx) + (y - cy) * (y - cy);
+        const rad = p.width / 2 + margin;
+        if (distSq < rad * rad) return true;
+      }
     }
+    return false;
+  }
 
-    this.groundPattern = ctx.createPattern(c, 'repeat');
+  isInsideZone(x, y, margin) {
+    if (!this.zones) return false;
+    for (let i = 0; i < this.zones.length; i++) {
+      const z = this.zones[i];
+      const dx = x - z.x;
+      const dy = y - z.y;
+      const rad = z.radius + margin;
+      if (dx * dx + dy * dy < rad * rad) return true;
+    }
+    return false;
   }
 
   generateProps() {
@@ -102,15 +125,44 @@ class World {
 
     for (let col = cStart; col < cEnd; col++) {
       for (let row = rStart; row < rEnd; row++) {
-        const x = col * TILE + TILE / 2;
-        const y = row * TILE + TILE / 2;
-        const r = Math.random();
-
-        if (r < 0.025) this.props.push(this.makeDeadTree(x, y));
-        else if (r < 0.05) this.props.push(this.makeSpikeRock(x, y));
-        else if (r < 0.09) this.props.push(this.makeShrub(x, y));
-        else if (r < 0.18) this.props.push(this.makeGrass(x, y));
-        else if (r < 0.195) this.props.push(this.makeCrystal(x, y));
+        const baseX = col * TILE + TILE / 2;
+        const baseY = row * TILE + TILE / 2;
+        
+        for (let k = 0; k < 3; k++) {
+          if (Math.random() > 0.7) continue;
+          const x = baseX + (Math.random() - 0.5) * TILE * 1.6;
+          const y = baseY + (Math.random() - 0.5) * TILE * 1.6;
+          
+          if (this.isInsidePath(x, y, 50)) continue;
+          if (this.isInsideZone(x, y, 60)) continue;
+          
+          const inZoneEdge = this.isInsideZone(x, y, 160);
+          const r = Math.random();
+          
+          if (inZoneEdge) {
+            if (r < 0.1) this.props.push(this.makeTree(x, y));
+            else if (r < 0.2) this.props.push(this.makeShrub(x, y));
+            else if (r < 0.25) this.props.push(this.makeGrass(x, y));
+          } else {
+            let isOverlapping = false;
+            for (let j = 0; j < this.props.length; j++) {
+              const p = this.props[j];
+              if (p.type === 'tree' || p.type === 'spikeRock') {
+                const dx = x - p.x;
+                const dy = y - p.y;
+                if (dx * dx + dy * dy < 65 * 65) {
+                  isOverlapping = true;
+                  break;
+                }
+              }
+            }
+            if (isOverlapping) continue;
+            if (r < 0.35) this.props.push(this.makeTree(x, y));
+            else if (r < 0.5) this.props.push(this.makeShrub(x, y));
+            else if (r < 0.65) this.props.push(this.makeGrass(x, y));
+            else if (r < 0.68) this.props.push(this.makeSpikeRock(x, y));
+          }
+        }
       }
     }
     this.props.sort((a, b) => a.y - b.y);
@@ -184,20 +236,18 @@ class World {
 
     for (const r of this.ruins) {
       if (r.type === 'ruinPillar') {
-        this.addCollision({ x: r.x, y: r.y + 4, radius: r.w * 0.7 });
+        this.addCollision({ x: r.x, y: r.y + 4, radius: r.w * 0.5 });
       }
     }
-
-    this.propTiles.clear();
   }
 
   buildCollisionList() {
     this.collisionList = [];
     for (const p of this.props) {
-      if (p.type === 'deadTree') {
-        this.collisionList.push({ x: p.x, y: p.y + 4, radius: 12, _frame: -1 });
+      if (p.type === 'tree') {
+        this.collisionList.push({ x: p.x, y: p.y - 2, radius: 10, _frame: -1 });
       } else if (p.type === 'spikeRock') {
-        this.collisionList.push({ x: p.x, y: p.y + 6, radius: p.h * 0.7, _frame: -1 });
+        this.collisionList.push({ x: p.x, y: p.y + 2, radius: p.h * 0.4, _frame: -1 });
       }
     }
     this.buildCollisionGrid();
@@ -238,79 +288,152 @@ class World {
     }
   }
 
-  buildPropTiles() {
-    this.propTiles.clear();
-    this.propTilesCols = Math.ceil(this.width / PROP_TILE);
-    this.propTilesRows = Math.ceil(this.height / PROP_TILE);
+  buildTreeSprites() {
+    this.treeSprites = [];
+    for (let i = 0; i < 10; i++) {
+      const w = 160;
+      const h = 180;
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      const cx = w / 2;
+      const cy = h - 20;
+      const th = 80 + Math.random() * 30;
+      const tr = 20 + Math.random() * 22;
+
+      ctx.fillStyle = '#0a0e14';
+      ctx.fillRect(cx - 4, cy - th * 0.4, 8, th * 0.4);
+
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+      ctx.beginPath(); ctx.ellipse(cx + 4, cy + 4, tr * 0.8, tr * 0.25, 0, 0, Math.PI * 2); ctx.fill();
+
+      ctx.fillStyle = '#0d1824';
+      ctx.beginPath();
+      ctx.ellipse(cx, cy - th * 0.6, tr * 1.1, tr * 0.9, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(cx - tr * 0.4, cy - th * 0.4, tr * 0.7, tr * 0.6, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(cx + tr * 0.4, cy - th * 0.45, tr * 0.7, tr * 0.6, 0, 0, Math.PI * 2); ctx.fill();
+
+      ctx.fillStyle = '#142438';
+      ctx.beginPath();
+      ctx.ellipse(cx - tr * 0.2, cy - th * 0.65, tr * 0.7, tr * 0.5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(cx + tr * 0.3, cy - th * 0.55, tr * 0.5, tr * 0.4, 0, 0, Math.PI * 2); ctx.fill();
+
+      ctx.fillStyle = '#1e3a2e';
+      ctx.beginPath();
+      ctx.ellipse(cx - tr * 0.3, cy - th * 0.75, tr * 0.4, tr * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(cx + tr * 0.1, cy - th * 0.7, tr * 0.3, tr * 0.2, 0, 0, Math.PI * 2); ctx.fill();
+
+      this.treeSprites.push(canvas);
+    }
   }
 
-  _getTile(col, row) {
-    const key = row * this.propTilesCols + col;
-    let tile = this.propTiles.get(key);
-    if (tile) return tile;
+  buildMapCanvas() {
+    this.mapCanvas = document.createElement('canvas');
+    this.mapCanvas.width = 1024;
+    this.mapCanvas.height = 512;
+    const ctx = this.mapCanvas.getContext('2d');
 
-    const canvas = document.createElement('canvas');
-    canvas.width = PROP_TILE;
-    canvas.height = PROP_TILE;
-    const tctx = canvas.getContext('2d');
-    tctx.translate(-col * PROP_TILE, -row * PROP_TILE);
+    const scaleX = this.mapCanvas.width / this.width;
+    const scaleY = this.mapCanvas.height / this.height;
+    
+    ctx.save();
+    ctx.scale(scaleX, scaleY);
 
-    const bounds = {
-      minX: col * PROP_TILE,
-      maxX: (col + 1) * PROP_TILE,
-      minY: row * PROP_TILE,
-      maxY: (row + 1) * PROP_TILE,
-    };
+    ctx.fillStyle = C.groundBase;
+    ctx.fillRect(0, 0, this.width, this.height);
+
+    for (let i = 0; i < 4000; i++) {
+      const x = Math.random() * this.width;
+      const y = Math.random() * this.height;
+      const r = Math.random() * 80 + 20;
+      const shade = Math.random();
+      if (shade < 0.4) ctx.fillStyle = 'rgba(13, 20, 30, 0.7)';
+      else if (shade < 0.8) ctx.fillStyle = 'rgba(8, 12, 20, 0.8)';
+      else ctx.fillStyle = 'rgba(22, 36, 54, 0.4)';
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    
+    for (let i = 0; i < 5000; i++) {
+      const x = Math.random() * this.width;
+      const y = Math.random() * this.height;
+      ctx.fillStyle = 'rgba(20, 40, 30, ' + (Math.random() * 0.3) + ')';
+      ctx.fillRect(x, y, 2 + Math.random() * 4, 2 + Math.random() * 4);
+    }
+
+    for (let i = 0; i < this.paths.length; i++) {
+      const p = this.paths[i];
+      const pts = p.points;
+      
+      for (let j = 0; j < pts.length - 1; j++) {
+        const pt = pts[j];
+        
+        ctx.fillStyle = 'rgba(16, 24, 36, 0.6)';
+        for (let k = 0; k < 10; k++) {
+          const ox = (Math.random() - 0.5) * p.width;
+          const oy = (Math.random() - 0.5) * p.width;
+          if (ox * ox + oy * oy < (p.width * 0.5) * (p.width * 0.5)) {
+            const r = Math.random() * 30 + 10;
+            ctx.beginPath();
+            ctx.arc(pt.x + ox, pt.y + oy, r, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+
+        ctx.fillStyle = 'rgba(10, 16, 26, 0.7)';
+        for (let k = 0; k < 5; k++) {
+          const ox = (Math.random() - 0.5) * p.width * 0.7;
+          const oy = (Math.random() - 0.5) * p.width * 0.7;
+          if (ox * ox + oy * oy < (p.width * 0.35) * (p.width * 0.35)) {
+            const r = Math.random() * 15 + 5;
+            ctx.beginPath();
+            ctx.arc(pt.x + ox, pt.y + oy, r, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+        
+        if (Math.random() > 0.6) {
+          ctx.fillStyle = 'rgba(30, 44, 60, 0.4)';
+          const ox = (Math.random() - 0.5) * p.width * 0.5;
+          const oy = (Math.random() - 0.5) * p.width * 0.5;
+          ctx.fillRect(pt.x + ox, pt.y + oy, 3, 3);
+        }
+      }
+    }
 
     for (let i = 0; i < this.props.length; i++) {
       const p = this.props[i];
-      if (p.x < bounds.minX - 100 || p.x > bounds.maxX + 100) continue;
-      if (p.y < bounds.minY - 100 || p.y > bounds.maxY + 100) continue;
-      if (p.type === 'deadTree') this.renderDeadTree(tctx, p.x, p.y, p, 0);
-      else if (p.type === 'spikeRock') this.renderSpikeRock(tctx, p.x, p.y, p);
-      else if (p.type === 'shrub') this.renderShrub(tctx, p.x, p.y, p, 0);
-      else if (p.type === 'grass') this.renderGrass(tctx, p.x, p.y, p, 0);
-      else if (p.type === 'crystal') this.renderCrystal(tctx, p.x, p.y, p, 0);
+      if (p.type === 'tree' || p.type === 'spikeRock') continue;
+      if (p.type === 'shrub') this.renderShrub(ctx, p.x, p.y, p, 0);
+      else if (p.type === 'grass') this.renderGrass(ctx, p.x, p.y, p, 0);
+      else if (p.type === 'crystal') this.renderCrystal(ctx, p.x, p.y, p, 0);
     }
     for (let i = 0; i < this.ruins.length; i++) {
       const r = this.ruins[i];
-      if (r.x < bounds.minX - 200 || r.x > bounds.maxX + 200) continue;
-      if (r.y < bounds.minY - 200 || r.y > bounds.maxY + 200) continue;
-      if (r.type === 'ruinPillar') this.renderRuinPillar(tctx, r.x, r.y, r, 0);
-      else if (r.type === 'rubble') this.renderRubble(tctx, r.x, r.y, r);
-      else if (r.type === 'ruinWall') this.renderRuinWall(tctx, r.x, r.y, r);
+      if (r.type === 'ruinPillar') this.renderRuinPillar(ctx, r.x, r.y, r, 0);
+      else if (r.type === 'rubble') this.renderRubble(ctx, r.x, r.y, r);
+      else if (r.type === 'ruinWall') this.renderRuinWall(ctx, r.x, r.y, r);
     }
-
-    tile = canvas;
-    this.propTiles.set(key, tile);
-    return tile;
+    ctx.restore();
   }
 
-  renderProps(ctx, camX, camY, viewW, viewH) {
-    const startCol = Math.max(0, Math.floor(camX / PROP_TILE));
-    const endCol = Math.min(this.propTilesCols - 1, Math.floor((camX + viewW) / PROP_TILE));
-    const startRow = Math.max(0, Math.floor(camY / PROP_TILE));
-    const endRow = Math.min(this.propTilesRows - 1, Math.floor((camY + viewH) / PROP_TILE));
-
-    for (let col = startCol; col <= endCol; col++) {
-      for (let row = startRow; row <= endRow; row++) {
-        const tile = this._getTile(col, row);
-        ctx.drawImage(tile, col * PROP_TILE - camX, row * PROP_TILE - camY);
-      }
-    }
-  }
-
-  makeDeadTree(x, y) {
-    return { type: 'deadTree', x, y, h: Utils.rand(50, 75), seed: Math.random() * 100, branches: Utils.randInt(3, 5) };
+  makeTree(x, y) {
+    return { type: 'tree', x, y, h: Utils.rand(60, 110), r: Utils.rand(20, 42), spriteIdx: Utils.randInt(0, 9), seed: Math.random() * 100 };
   }
   makeSpikeRock(x, y) {
-    return { type: 'spikeRock', x, y, h: Utils.rand(24, 40), seed: Math.random() * 100, verts: this.makeVerts(Utils.rand(20, 32)) };
+    return { type: 'spikeRock', x, y, h: Utils.rand(20, 30), seed: Math.random() * 100, verts: this.makeVerts(Utils.rand(20, 32)) };
   }
   makeShrub(x, y) {
-    return { type: 'shrub', x, y, size: Utils.rand(14, 22), seed: Math.random() * 100 };
+    return { type: 'shrub', x, y, size: Utils.rand(14, 20), seed: Math.random() * 100 };
   }
   makeGrass(x, y) {
-    return { type: 'grass', x, y, size: Utils.rand(8, 14), seed: Math.random() * 100 };
+    return { type: 'grass', x, y, size: Utils.rand(10, 14), seed: Math.random() * 100 };
   }
   makeCrystal(x, y) {
     return { type: 'crystal', x, y, size: Utils.rand(10, 16), seed: Math.random() * 100 };
@@ -381,70 +504,50 @@ class World {
   }
 
   renderGround(ctx, camX, camY, viewW, viewH) {
-    if (!this.groundPattern) this.buildGroundPattern();
+    const sx = camX * (this.mapCanvas.width / this.width);
+    const sy = camY * (this.mapCanvas.height / this.height);
+    const sw = viewW * (this.mapCanvas.width / this.width);
+    const sh = viewH * (this.mapCanvas.height / this.height);
 
-    ctx.fillStyle = this.groundPattern;
-    ctx.save();
-    ctx.translate(-(camX % 256), -(camY % 256));
-    ctx.fillRect(0, 0, viewW + 256, viewH + 256);
-    ctx.restore();
-
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.18)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    const startCol = Math.max(0, Math.floor(camX / TILE) - 1);
-    const endCol = Math.min(MAP_COLS, Math.ceil((camX + viewW) / TILE) + 1);
-    const startRow = Math.max(0, Math.floor(camY / TILE) - 1);
-    const endRow = Math.min(MAP_ROWS, Math.ceil((camY + viewH) / TILE) + 1);
-    for (let col = startCol; col < endCol; col++) {
-      const x = col * TILE - camX;
-      ctx.moveTo(x, 0); ctx.lineTo(x, viewH);
-    }
-    for (let row = startRow; row < endRow; row++) {
-      const y = row * TILE - camY;
-      ctx.moveTo(0, y); ctx.lineTo(viewW, y);
-    }
-    ctx.stroke();
+    ctx.drawImage(this.mapCanvas, sx, sy, sw, sh, 0, 0, viewW, viewH);
   }
 
   renderZoneOverlay(ctx, camX, camY, zones) {
-    if (!this._zoneCanvases) this._buildZoneCanvases(zones);
+    this._dashOffset -= 0.02;
 
     for (let i = 0; i < zones.length; i++) {
       const zone = zones[i];
-      const c = this._zoneCanvases[i];
-      if (!c) continue;
-      const x = zone.x - c.half - camX;
-      const y = zone.y - c.half - camY;
-      if (x + c.size < 0 || x > ctx.canvas.width) continue;
-      if (y + c.size < 0 || y > ctx.canvas.height) continue;
-      ctx.drawImage(c.canvas, x, y);
-    }
-  }
+      const sx = zone.x - camX;
+      const sy = zone.y - camY;
+      const r = zone.radius;
 
-  _buildZoneCanvases(zones) {
-    this._zoneCanvases = [];
-    for (let i = 0; i < zones.length; i++) {
-      const zone = zones[i];
-      const size = Math.ceil(zone.radius * 2 + 4);
-      const half = size / 2;
-      const canvas = document.createElement('canvas');
-      canvas.width = size;
-      canvas.height = size;
-      const zc = canvas.getContext('2d');
+      if (sx + r < 0 || sx - r > ctx.canvas.width) continue;
+      if (sy + r < 0 || sy - r > ctx.canvas.height) continue;
 
-      zc.globalAlpha = 0.1;
-      zc.fillStyle = zone.color;
-      zc.beginPath(); zc.arc(half, half, zone.radius, 0, Math.PI * 2); zc.fill();
+      const segments = 60;
+      const angleStep = (Math.PI * 2) / segments;
+      const startAngle = this._dashOffset * 0.05;
 
-      zc.globalAlpha = 0.4;
-      zc.strokeStyle = zone.color;
-      zc.lineWidth = 1.5;
-      zc.setLineDash([8, 8]);
-      zc.beginPath(); zc.arc(half, half, zone.radius, 0, Math.PI * 2); zc.stroke();
-      zc.setLineDash([]);
+      ctx.save();
+      
+      ctx.strokeStyle = zone.color;
+      ctx.lineWidth = 7;
+      ctx.lineCap = 'round';
+      ctx.globalAlpha = 0.6;
+      ctx.shadowColor = zone.color;
+      ctx.shadowBlur = 25;
 
-      this._zoneCanvases.push({ canvas, half, size });
+      for (let j = 0; j < segments; j++) {
+        if (j % 2 !== 0) continue;
+        const a1 = startAngle + j * angleStep;
+        const a2 = a1 + angleStep * 0.8;
+        
+        ctx.beginPath();
+        ctx.arc(sx, sy, r, a1, a2);
+        ctx.stroke();
+      }
+
+      ctx.restore();
     }
   }
 
@@ -497,60 +600,28 @@ class World {
     }
   }
 
-  renderDeadTree(ctx, x, y, p, now) {
-    const s = p.h;
-
-    ctx.fillStyle = C.shadow;
-    ctx.beginPath(); ctx.ellipse(x + 4, y + s * 0.08, s * 0.28, s * 0.1, 0, 0, Math.PI * 2); ctx.fill();
-
-    ctx.strokeStyle = C.treeDark;
-    ctx.lineWidth = 7; ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(x, y + s * 0.1);
-    ctx.quadraticCurveTo(x + 0.3, y - s * 0.3, x, y - s * 0.7);
-    ctx.stroke();
-
-    ctx.strokeStyle = C.treeMid;
-    ctx.lineWidth = 4;
-    for (let i = 0; i < p.branches; i++) {
-      const t = 0.3 + (i / p.branches) * 0.55;
-      const bx = x;
-      const by = y - s * t;
-      const dir = (i % 2 === 0 ? 1 : -1);
-      const blen = s * (0.28 - i * 0.02);
-      const bAngle = -0.5 - i * 0.2;
-
-      ctx.beginPath();
-      ctx.moveTo(bx, by);
-      ctx.quadraticCurveTo(bx + dir * blen * 0.5, by - blen * 0.3, bx + dir * blen, by - blen * Math.sin(bAngle + 0.5));
-      ctx.stroke();
-
-      ctx.strokeStyle = C.treeEdge;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(bx, by);
-      ctx.quadraticCurveTo(bx + dir * blen * 0.7, by - blen * 0.6, bx + dir * blen * 1.1, by - blen * 0.85);
-      ctx.stroke();
-      ctx.strokeStyle = C.treeMid;
-      ctx.lineWidth = 4;
-    }
+  renderTree(ctx, x, y, p) {
+    const sprite = this.treeSprites[p.spriteIdx];
+    const w = sprite.width;
+    const h = sprite.height;
+    ctx.drawImage(sprite, x - w / 2, y - h + 20);
   }
 
   renderSpikeRock(ctx, x, y, p) {
     const s = p.h;
     ctx.fillStyle = C.shadow;
-    ctx.beginPath(); ctx.ellipse(x + 5, y + s * 0.35, s * 1.1, s * 0.4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(x + 4, y + s * 0.3, s * 1.1, s * 0.4, 0, 0, Math.PI * 2); ctx.fill();
 
     ctx.fillStyle = C.rockDark;
     ctx.beginPath();
-    ctx.moveTo(x + p.verts[0][0], y + p.verts[0][1] + s * 0.35);
-    for (let i = 1; i < p.verts.length; i++) ctx.lineTo(x + p.verts[i][0], y + p.verts[i][1] + s * 0.35);
+    ctx.moveTo(x + p.verts[0][0], y + p.verts[0][1] + s * 0.3);
+    for (let i = 1; i < p.verts.length; i++) ctx.lineTo(x + p.verts[i][0], y + p.verts[i][1] + s * 0.3);
     ctx.closePath(); ctx.fill();
 
     ctx.fillStyle = C.rockMid;
     ctx.beginPath();
-    ctx.moveTo(x + p.verts[0][0] * 0.9, y + p.verts[0][1] * 0.9 + s * 0.15);
-    for (let i = 1; i < p.verts.length; i++) ctx.lineTo(x + p.verts[i][0] * 0.9, y + p.verts[i][1] * 0.9 + s * 0.15);
+    ctx.moveTo(x + p.verts[0][0] * 0.9, y + p.verts[0][1] * 0.9 + s * 0.1);
+    for (let i = 1; i < p.verts.length; i++) ctx.lineTo(x + p.verts[i][0] * 0.9, y + p.verts[i][1] * 0.9 + s * 0.1);
     ctx.closePath(); ctx.fill();
 
     ctx.fillStyle = C.rockLight;
@@ -562,8 +633,8 @@ class World {
     ctx.fillStyle = C.rockHighlight;
     ctx.beginPath();
     ctx.moveTo(x - s * 0.15, y - s * 0.25);
-    ctx.lineTo(x - s * 0.05, y - s * 0.5);
-    ctx.lineTo(x + s * 0.15, y - s * 0.35);
+    ctx.lineTo(x - s * 0.05, y - s * 0.4);
+    ctx.lineTo(x + s * 0.1, y - s * 0.3);
     ctx.lineTo(x + s * 0.05, y - s * 0.1);
     ctx.closePath(); ctx.fill();
   }
@@ -574,20 +645,20 @@ class World {
     ctx.fillStyle = C.shadow;
     ctx.beginPath(); ctx.ellipse(x + 3, y + s * 0.4, s * 0.9, s * 0.3, 0, 0, Math.PI * 2); ctx.fill();
 
-    ctx.fillStyle = C.treeMid;
-    ctx.beginPath(); ctx.arc(x, y, s * 0.55, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(x - s * 0.4, y - s * 0.15, s * 0.45, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(x + s * 0.4, y - s * 0.2, s * 0.42, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#0a121e';
+    ctx.beginPath(); ctx.ellipse(x, y, s * 0.55, s * 0.4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(x - s * 0.4, y - s * 0.15, s * 0.45, s * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(x + s * 0.4, y - s * 0.2, s * 0.42, s * 0.3, 0, 0, Math.PI * 2); ctx.fill();
 
-    ctx.fillStyle = C.treeEdge;
-    ctx.beginPath(); ctx.arc(x - s * 0.15, y - s * 0.35, s * 0.35, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(x + s * 0.25, y - s * 0.4, s * 0.3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#142438';
+    ctx.beginPath(); ctx.ellipse(x - s * 0.15, y - s * 0.35, s * 0.35, s * 0.25, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(x + s * 0.25, y - s * 0.4, s * 0.3, s * 0.2, 0, 0, Math.PI * 2); ctx.fill();
   }
 
   renderGrass(ctx, x, y, p, now) {
     const s = p.size;
 
-    ctx.strokeStyle = C.treeEdge;
+    ctx.strokeStyle = '#1e3a2e';
     ctx.lineWidth = 1.5; ctx.lineCap = 'round';
     for (let i = 0; i < 4; i++) {
       const a = (i / 4 - 0.5) * 0.8;
@@ -605,7 +676,7 @@ class World {
 
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = 0.25;
+    ctx.globalAlpha = 0.2;
     ctx.fillStyle = '#4a9eff';
     ctx.beginPath(); ctx.arc(x, y, s * 1.5, 0, Math.PI * 2); ctx.fill();
     ctx.restore();

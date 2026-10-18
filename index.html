@@ -13,7 +13,18 @@
     font-family: 'SF Mono', 'JetBrains Mono', Consolas, monospace;
     color: #e8eef5; user-select: none; cursor: crosshair;
   }
-  canvas { display: block; }
+  #game {
+    position: relative;
+    z-index: 1;
+    display: block;
+  }
+  #vignette-css {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 2;
+    background: radial-gradient(circle at center, transparent 30%, rgba(5, 8, 18, 0.8) 100%);
+  }
 
   #hud {
     position: fixed; top: 24px; left: 28px;
@@ -68,7 +79,7 @@
   #dash-indicator {
     position: fixed;
     right: 20px;
-    bottom: 240px;
+    bottom: 220px;
     width: 60px; height: 60px;
     pointer-events: none;
     z-index: 6;
@@ -91,7 +102,6 @@
     font-weight: 700;
     color: #e8eef5;
     font-variant-numeric: tabular-nums;
-    text-shadow: 0 0 10px rgba(74, 158, 255, 0.9);
     line-height: 1;
   }
   #dash-label .dash-icon {
@@ -139,25 +149,18 @@
     height: 10px;
     background: rgba(74, 158, 255, 0.3);
   }
-  #ctrl-charge,
-  #ctrl-dash,
-  #ctrl-charge-sep,
-  #ctrl-dash-sep {
+  #ctrl-charge, #ctrl-dash, #ctrl-charge-sep, #ctrl-dash-sep {
     overflow: hidden;
     max-width: 0;
     opacity: 0;
     transition: max-width 0.5s ease, opacity 0.4s ease;
     white-space: nowrap;
   }
-  #ctrl-charge.show,
-  #ctrl-dash.show,
-  #ctrl-charge-sep.show,
-  #ctrl-dash-sep.show {
+  #ctrl-charge.show, #ctrl-dash.show, #ctrl-charge-sep.show, #ctrl-dash-sep.show {
     max-width: 220px;
     opacity: 1;
   }
-  #ctrl-charge-sep.show,
-  #ctrl-dash-sep.show {
+  #ctrl-charge-sep.show, #ctrl-dash-sep.show {
     max-width: 4px;
   }
 
@@ -530,9 +533,7 @@
   .talent-node:hover { z-index: 10; }
 
   .talent-node.locked { opacity: 0.35; cursor: not-allowed; }
-  .talent-node.available {
-    border-color: #4a9eff;
-  }
+  .talent-node.available { border-color: #4a9eff; }
   .talent-node.learned {
     border-color: #4a9eff;
     background: rgba(74,158,255,0.2);
@@ -733,6 +734,7 @@
 </head>
 <body>
 <canvas id="game"></canvas>
+<div id="vignette-css"></div>
 
 <div id="hud">
   <div class="hud-row">
@@ -763,15 +765,17 @@
     <span><b>МЫШЬ</b> прицел</span>
     <span class="ctrl-sep"></span>
     <span><b>ЛКМ</b> удар</span>
-    <span id="ctrl-charge-sep" class="ctrl-sep"></span>
-    <span id="ctrl-charge"><b>ПРОБЕЛ</b> заряд</span>
     <span id="ctrl-dash-sep" class="ctrl-sep"></span>
     <span id="ctrl-dash"><b>SHIFT</b> рывок</span>
+    <span id="ctrl-charge-sep" class="ctrl-sep"></span>
+    <span id="ctrl-charge"><b>ПРОБЕЛ</b> заряд</span>
   </div>
   <div class="ctrl-row">
     <span><b>U</b> таланты</span>
     <span class="ctrl-sep"></span>
     <span><b>K</b> кодекс</span>
+    <span class="ctrl-sep"></span>
+    <span><b>M</b> карта</span>
     <span class="ctrl-sep"></span>
     <span><b>I</b> звук</span>
     <span class="ctrl-sep"></span>

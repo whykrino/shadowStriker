@@ -36,13 +36,13 @@ class ZoneManager {
     this.world = world;
     this.playerLevel = 1;
 
-    this.zones.push(new Zone(1000, 1100, 500, 'safe', 'Луга слизней',
+    this.zones.push(new Zone(1000, 1100, 650, 'safe', 'Луга слизней',
       ['slime', 'slime', 'slime', 'slime', 'slime', 'slime', 'slime']));
 
-    this.zones.push(new Zone(3600, 1600, 520, 'mid', 'Пепелище',
+    this.zones.push(new Zone(3600, 1600, 680, 'mid', 'Пепелище',
       ['tank', 'tank', 'ranger', 'ghost', 'worm', 'shaman', 'flyer', 'kamikaze', 'assassin']));
 
-    this.zones.push(new Zone(6100, 1500, 520, 'hard', 'Проклятый сад',
+    this.zones.push(new Zone(6100, 1500, 680, 'hard', 'Проклятый сад',
       ['assassin', 'assassin', 'ghost', 'sentinel', 'shaman', 'flyer', 'kamikaze', 'worm', 'summoner']));
 
     this.spawnTimers = new Float32Array(this.zones.length);
@@ -54,6 +54,8 @@ class ZoneManager {
       const z = this.zones[i];
       for (let k = 0; k < z.targetCount; k++) this.spawnInZone(z);
     }
+
+    this.world.initWorld(this.zones);
   }
 
   attachBulletPool(pool) {

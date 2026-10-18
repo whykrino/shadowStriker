@@ -17,7 +17,7 @@ class Player {
 
     this.attackTimer = 0;
     this.attackCooldown = 0;
-    this.attackDuration = 0.3;
+    this.attackDuration = 0.4;
     this.attackArc = Math.PI * 1.35;
     this.attackHitApplied = false;
     this.attackQueued = false;
@@ -32,6 +32,7 @@ class Player {
     this._prevSpaceDown = false;
 
     this._isSpinAttackActive = false;
+    this._spinVisualAngle = 0;
 
     this.dashTimer = 0;
     this.dashCooldown = 0;
@@ -135,6 +136,7 @@ class Player {
   startAttack(charged) {
     if (!this.alive || this.attackTimer > 0) return;
     if (this.attackCooldown > 0) { this.attackQueued = true; return; }
+    
     this.attackTimer = this.attackDuration;
     this.attackCooldown = charged ? 1.2 : 0.4;
     this.attackHitApplied = false;
@@ -148,13 +150,15 @@ class Player {
     if (!this.abilities.has('spin')) return false;
     if (this.attackTimer > 0) return false;
     if (this.attackCooldown > 0) return false;
-    this.attackTimer = 0.45;
-    this.attackDuration = 0.45;
+    
+    this.attackTimer = 0.65;
+    this.attackDuration = 0.65;
     this.attackCooldown = 0.9;
     this.attackArc = Math.PI * 2;
     this.attackHitApplied = false;
     this.chargedAttack = false;
     this._isSpinAttackActive = true;
+    this._spinVisualAngle = 0;
     return true;
   }
 
@@ -185,7 +189,13 @@ class Player {
     if (this.attackTimer <= 0 && this._isSpinAttackActive) {
       this._isSpinAttackActive = false;
       this.attackArc = Math.PI * 1.35;
-      this.attackDuration = 0.3;
+      this.attackDuration = 0.4;
+    }
+
+    if (this._isSpinAttackActive && this.attackTimer > 0) {
+      const p = 1 - this.attackTimer / this.attackDuration;
+      const spinPhase = Math.min(1, p / 0.75);
+      this._spinVisualAngle = spinPhase * Math.PI * 2;
     }
 
     if (this.buffTimer > 0) {
@@ -284,7 +294,7 @@ class Player {
     }
 
     let vx = 0, vy = 0;
-    if (mag > 0) {
+    if (mag > 0 && !this._isSpinAttackActive) {
       const nx = mv.x / mag;
       const ny = mv.y / mag;
       let spd = this.dashTimer > 0 ? this._cachedDash : this._cachedSpeed;
@@ -298,16 +308,20 @@ class Player {
 
     world.collide(this, this.radius);
 
-    this.faceTowards(mouseWorldX, mouseWorldY);
-    this.facing = Utils.angleLerp(this.facing, this.targetFacing, Math.min(1, dt * 22));
+    if (!this._isSpinAttackActive) {
+      this.faceTowards(mouseWorldX, mouseWorldY);
+      this.facing = Utils.angleLerp(this.facing, this.targetFacing, Math.min(1, dt * 22));
+    } else {
+      this.facing = this.targetFacing + this._spinVisualAngle;
+    }
 
-    if (mag > 0) this.walkPhase += dt * 12;
+    if (mag > 0) this.walkPhase += dt * 15;
     this.breathePhase += dt * 2.5;
 
     if (this.attackTimer > 0) {
       const p = 1 - this.attackTimer / this.attackDuration;
-      if (p > 0.2 && p < 0.85) {
-        const tt = (p - 0.2) / 0.65;
+      if (p > 0.15 && p < 0.9) {
+        const tt = (p - 0.15) / 0.75;
         this.trailAlpha = Math.sin(tt * Math.PI);
       } else {
         this.trailAlpha = 0;
@@ -325,7 +339,7 @@ class Player {
   consumeAttackHit() {
     if (this.attackTimer > 0 && !this.attackHitApplied) {
       const p = 1 - this.attackTimer / this.attackDuration;
-      if (p > 0.35 && p < 0.65) {
+      if (p > 0.3 && p < 0.7) {
         this.attackHitApplied = true;
         return true;
       }
@@ -342,31 +356,45 @@ class Player {
     let rElbowX = 10;
     let rElbowY = 4;
 
-    const attackActive = this.attackTimer > 0;
-
-    if (attackActive) {
+    if (this.attackTimer > 0) {
       const p = 1 - this.attackTimer / this.attackDuration;
-      const wEnd = 0.35, sEnd = 0.7;
 
-      let angleOff;
-      if (p < wEnd) {
-        const t = p / wEnd;
-        const e = t * t;
-        angleOff = Utils.lerp(0, -0.7, e);
-      } else if (p < sEnd) {
-        const t = (p - wEnd) / (sEnd - wEnd);
-        const e = 1 - Math.pow(1 - t, 3);
-        angleOff = Utils.lerp(-0.7, 1.6, e);
+      if (this._isSpinAttackActive) {
+        if (p < 0.75) {
+          handX = 20;
+          handY = 2;
+          swordAngle = -Math.PI * 0.32;
+        } else {
+          const t = (p - 0.75) / 0.25;
+          const ease = 1 - Math.pow(1 - t, 3);
+          
+          handX = Utils.lerp(20, 10, ease);
+          handY = Utils.lerp(2, -10, ease);
+          swordAngle = Utils.lerp(-Math.PI * 0.32, -Math.PI * 0.5, ease);
+        }
       } else {
-        const t = (p - sEnd) / (1 - sEnd);
-        const e = t * t * (3 - 2 * t);
-        angleOff = Utils.lerp(1.6, 0, e);
+        const wEnd = 0.35, sEnd = 0.7;
+
+        let angleOff;
+        if (p < wEnd) {
+          const t = p / wEnd;
+          const e = t * t;
+          angleOff = Utils.lerp(0, -0.7, e);
+        } else if (p < sEnd) {
+          const t = (p - wEnd) / (sEnd - wEnd);
+          const e = 1 - Math.pow(1 - t, 3);
+          angleOff = Utils.lerp(-0.7, 1.6, e);
+        } else {
+          const t = (p - sEnd) / (1 - sEnd);
+          const e = t * t * (3 - 2 * t);
+          angleOff = Utils.lerp(1.6, 0, e);
+        }
+
+        handX = 16 + Math.cos(-Math.PI * 0.32 + angleOff * 0.5) * 6;
+        handY = 2 + Math.sin(-Math.PI * 0.32 + angleOff * 0.5) * 6;
+
+        swordAngle = -Math.PI * 0.32 + angleOff;
       }
-
-      handX = 16 + Math.cos(-Math.PI * 0.32 + angleOff * 0.5) * 6;
-      handY = 2 + Math.sin(-Math.PI * 0.32 + angleOff * 0.5) * 6;
-
-      swordAngle = -Math.PI * 0.32 + angleOff;
 
       lElbowX = (8 + handX) / 2 - 2;
       lElbowY = (2 + handY) / 2 + 3;
@@ -393,7 +421,7 @@ class Player {
       ctx.globalAlpha = al * 0.4;
       ctx.fillStyle = '#b070ff';
       ctx.beginPath();
-      ctx.arc(px, py, 60, 0, Math.PI * 2);
+      ctx.arc(px, py, 70, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     }
@@ -466,36 +494,50 @@ class Player {
     }
 
     if (this.trailAlpha > 0.01) {
-      const sweep = this.attackArc * this.trailAlpha;
-      const startAngle = this.facing - sweep / 2;
-      const endAngle = this.facing + sweep / 2;
-      const range = this._cachedRange * (this.chargedAttack ? 1.4 : 1);
+      let startAngle, endAngle;
 
-      const col = this.chargedAttack ? '255, 200, 80' : '74, 158, 255';
+      if (this._isSpinAttackActive) {
+        const p = 1 - this.attackTimer / this.attackDuration;
+        if (p < 0.75) {
+          startAngle = this.targetFacing - 0.5;
+          endAngle = this.facing + 0.5;
+        } else {
+          startAngle = endAngle = this.facing;
+        }
+      } else {
+        const sweep = this.attackArc * this.trailAlpha;
+        startAngle = this.facing - sweep / 2;
+        endAngle = this.facing + sweep / 2;
+      }
 
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.globalAlpha = this.trailAlpha * 0.35;
-      ctx.fillStyle = 'rgb(' + col + ')';
-      ctx.beginPath();
-      ctx.moveTo(px, py);
-      ctx.arc(px, py, range, startAngle, endAngle);
-      ctx.closePath();
-      ctx.fill();
+      if (endAngle > startAngle) {
+        const range = this._cachedRange * (this.chargedAttack ? 1.4 : 1);
+        const col = this.chargedAttack ? '255, 200, 80' : '74, 158, 255';
 
-      ctx.globalAlpha = this.trailAlpha * 0.7;
-      ctx.fillStyle = 'rgba(255, 240, 220, 1)';
-      ctx.beginPath();
-      ctx.arc(px, py, range - 4, startAngle, endAngle);
-      ctx.arc(px, py, range - 18, endAngle, startAngle, true);
-      ctx.closePath();
-      ctx.fill();
-      ctx.restore();
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.globalAlpha = this.trailAlpha * 0.35;
+        ctx.fillStyle = 'rgb(' + col + ')';
+        ctx.beginPath();
+        ctx.moveTo(px, py);
+        ctx.arc(px, py, range, startAngle, endAngle);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.globalAlpha = this.trailAlpha * 0.7;
+        ctx.fillStyle = 'rgba(255, 240, 220, 1)';
+        ctx.beginPath();
+        ctx.arc(px, py, range - 4, startAngle, endAngle);
+        ctx.arc(px, py, range - 18, endAngle, startAngle, true);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
     }
 
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
     ctx.beginPath();
-    ctx.ellipse(px + 3, py + 20, 18, 6, 0, 0, Math.PI * 2);
+    ctx.ellipse(px + 4, py + 24, 22, 8, 0, 0, Math.PI * 2);
     ctx.fill();
 
     let flipSprite = false;
@@ -505,7 +547,15 @@ class Player {
     ctx.save();
     ctx.translate(px + shakeX, py + shakeY);
     if (flipSprite) ctx.scale(-1, 1);
-    this._renderCharacter(ctx);
+    
+    if (this._isSpinAttackActive) {
+      const p = 1 - this.attackTimer / this.attackDuration;
+      const crouch = Math.sin(Math.min(1, p / 0.75) * Math.PI) * 6;
+      this._renderCharacter(ctx, crouch);
+    } else {
+      this._renderCharacter(ctx, 0);
+    }
+
     ctx.restore();
 
     if (this.damageFlash > 0) {
@@ -513,188 +563,199 @@ class Player {
       ctx.globalAlpha = this.damageFlash / 0.4 * 0.5;
       ctx.fillStyle = '#ff3355';
       ctx.beginPath();
-      ctx.arc(px, py, 40, 0, Math.PI * 2);
+      ctx.arc(px, py, 45, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     }
   }
 
-  _renderCharacter(ctx) {
+  _renderCharacter(ctx, crouch) {
     const walkSin = Math.sin(this.walkPhase);
     const walkAmt = Math.abs(walkSin) > 0.05 ? 1 : 0;
-    const bob = Math.sin(this.walkPhase * 2) * 1.5 * walkAmt;
-    const breathe = Math.sin(this.breathePhase) * 0.6;
+    const bob = Math.sin(this.walkPhase * 2) * 3 * walkAmt;
+    const breathe = Math.sin(this.breathePhase) * 1;
+    
+    const kneeBend = (1 - walkAmt) * (Math.sin(this.breathePhase * 0.8) * 0.5 + 0.5) * 2 + crouch;
+    const weightShift = (1 - walkAmt) * Math.sin(this.breathePhase * 0.6) * 2;
 
     const pose = this.getWeaponPose();
 
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    const hipX = 0;
-    const hipY = 8 + bob * 0.3;
+    const hipX = weightShift;
+    const hipY = 8 + bob * 0.5 + kneeBend;
 
-    const legStride = walkSin * 6 * walkAmt;
+    const legStride = walkSin * 8 * walkAmt;
+    const legLift = Math.max(0, Math.cos(this.walkPhase)) * 5 * walkAmt;
+    const legLiftR = Math.max(0, -Math.cos(this.walkPhase)) * 5 * walkAmt;
 
     ctx.strokeStyle = '#0e1524';
-    ctx.lineWidth = 8;
+    ctx.lineWidth = 10;
     ctx.beginPath();
-    ctx.moveTo(hipX - 3, hipY);
-    ctx.lineTo(hipX - 5 + legStride, hipY + 12);
+    ctx.moveTo(hipX - 4, hipY);
+    ctx.lineTo(hipX - 6 + legStride * 0.5, hipY + 12 - legLift * 0.5);
     ctx.stroke();
     ctx.beginPath();
-    ctx.moveTo(hipX + 3, hipY);
-    ctx.lineTo(hipX + 5 - legStride, hipY + 12);
+    ctx.moveTo(hipX + 4, hipY);
+    ctx.lineTo(hipX + 6 - legStride * 0.5, hipY + 12 - legLiftR * 0.5);
     ctx.stroke();
 
     ctx.strokeStyle = '#0a0e18';
-    ctx.lineWidth = 7;
+    ctx.lineWidth = 8;
     ctx.beginPath();
-    ctx.moveTo(hipX - 5 + legStride, hipY + 12);
-    ctx.lineTo(hipX - 5 + legStride * 1.4, hipY + 22);
+    ctx.moveTo(hipX - 6 + legStride * 0.5, hipY + 12 - legLift * 0.5);
+    ctx.lineTo(hipX - 6 + legStride, hipY + 24 - legLift);
     ctx.stroke();
     ctx.beginPath();
-    ctx.moveTo(hipX + 5 - legStride, hipY + 12);
-    ctx.lineTo(hipX + 5 - legStride * 1.4, hipY + 22);
+    ctx.moveTo(hipX + 6 - legStride * 0.5, hipY + 12 - legLiftR * 0.5);
+    ctx.lineTo(hipX + 6 - legStride, hipY + 24 - legLiftR);
     ctx.stroke();
 
     ctx.fillStyle = '#0a0e18';
     ctx.beginPath();
-    ctx.ellipse(hipX - 6 + legStride * 1.4, hipY + 23, 5, 3, 0, 0, Math.PI * 2);
+    ctx.ellipse(hipX - 6 + legStride, hipY + 25 - legLift, 6, 3, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.beginPath();
-    ctx.ellipse(hipX + 6 - legStride * 1.4, hipY + 23, 5, 3, 0, 0, Math.PI * 2);
+    ctx.ellipse(hipX + 6 - legStride, hipY + 25 - legLiftR, 6, 3, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    const torsoBottomY = hipY - 1;
-    const torsoTopY = hipY - 18 + breathe * 0.3;
+    const torsoBottomY = hipY - 2;
+    const torsoTopY = hipY - 26;
 
     ctx.fillStyle = '#1a2438';
     ctx.beginPath();
-    ctx.moveTo(hipX - 8, torsoBottomY);
-    ctx.lineTo(hipX + 8, torsoBottomY);
-    ctx.lineTo(hipX + 9, torsoTopY + 4);
-    ctx.lineTo(hipX + 8, torsoTopY);
-    ctx.lineTo(hipX - 8, torsoTopY);
-    ctx.lineTo(hipX - 9, torsoTopY + 4);
+    ctx.moveTo(hipX - 10, torsoBottomY);
+    ctx.lineTo(hipX + 10, torsoBottomY);
+    ctx.lineTo(hipX + 12, torsoTopY + 6);
+    ctx.lineTo(hipX + 10, torsoTopY);
+    ctx.lineTo(hipX - 10, torsoTopY);
+    ctx.lineTo(hipX - 12, torsoTopY + 6);
     ctx.closePath();
     ctx.fill();
 
     ctx.fillStyle = '#11192a';
     ctx.beginPath();
-    ctx.moveTo(hipX - 6, torsoBottomY - 2);
-    ctx.lineTo(hipX + 6, torsoBottomY - 2);
-    ctx.lineTo(hipX + 7, torsoTopY + 6);
-    ctx.lineTo(hipX - 7, torsoTopY + 6);
+    ctx.moveTo(hipX - 8, torsoBottomY - 3);
+    ctx.lineTo(hipX + 8, torsoBottomY - 3);
+    ctx.lineTo(hipX + 9, torsoTopY + 8);
+    ctx.lineTo(hipX - 9, torsoTopY + 8);
     ctx.closePath();
     ctx.fill();
 
     ctx.strokeStyle = '#4a9eff';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.moveTo(hipX - 8, hipY - 2);
-    ctx.lineTo(hipX + 8, hipY - 2);
+    ctx.moveTo(hipX - 10, hipY - 2);
+    ctx.lineTo(hipX + 10, hipY - 2);
     ctx.stroke();
 
-    const headX = hipX + 1;
-    const headY = torsoTopY - 6;
+    ctx.fillStyle = '#4a9eff';
+    ctx.beginPath();
+    ctx.ellipse(hipX, hipY - 2, 4, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    const headX = hipX + 2 + weightShift * 0.3;
+    const headY = torsoTopY - 8;
 
     ctx.fillStyle = '#06090f';
     ctx.beginPath();
-    ctx.arc(headX, headY, 9, 0, Math.PI * 2);
+    ctx.arc(headX, headY, 11, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.fillStyle = '#0e1524';
     ctx.beginPath();
-    ctx.arc(headX + 1, headY, 8, 0, Math.PI * 2);
+    ctx.arc(headX + 1, headY, 10, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.fillStyle = '#1e2c44';
     ctx.beginPath();
-    ctx.arc(headX + 2, headY - 1, 5, 0, Math.PI * 2);
+    ctx.arc(headX + 3, headY - 1, 6.5, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.fillStyle = '#4a9eff';
-    ctx.fillRect(headX - 5, headY - 1, 11, 2);
+    ctx.fillRect(headX - 5, headY - 1, 13, 2.5);
 
     ctx.strokeStyle = '#0a0e18';
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 3.5;
     ctx.beginPath();
-    ctx.moveTo(headX - 6, headY);
-    ctx.lineTo(headX - 16, headY + 3);
+    ctx.moveTo(headX - 7, headY + 2);
+    ctx.lineTo(headX - 18, headY + 5);
     ctx.stroke();
 
-    const shoulderLX = hipX - 8;
-    const shoulderLY = torsoTopY + 4;
-    const shoulderRX = hipX + 8;
-    const shoulderRY = torsoTopY + 4;
+    const shoulderLX = hipX - 10;
+    const shoulderLY = torsoTopY + 5;
+    const shoulderRX = hipX + 10;
+    const shoulderRY = torsoTopY + 5;
 
-    const handX = pose.handX;
+    const handX = pose.handX + weightShift;
     const handY = hipY + pose.handY;
 
+    const elbowX = (shoulderLX + handX) / 2 - 6;
+    const elbowY = (shoulderLY + handY) / 2 + 8;
+
     ctx.strokeStyle = '#11192a';
-    ctx.lineWidth = 6;
+    ctx.lineWidth = 7;
     ctx.beginPath();
     ctx.moveTo(shoulderLX, shoulderLY);
-    ctx.quadraticCurveTo(
-      pose.lElbowX,
-      pose.lElbowY + torsoTopY + 4,
-      handX - 2,
-      handY
-    );
+    ctx.quadraticCurveTo(elbowX, elbowY, handX - 2, handY);
     ctx.stroke();
 
     ctx.strokeStyle = '#0a0e18';
-    ctx.lineWidth = 5;
+    ctx.lineWidth = 6;
     ctx.beginPath();
     ctx.moveTo(shoulderRX, shoulderRY);
-    ctx.quadraticCurveTo(
-      pose.rElbowX,
-      pose.rElbowY + torsoTopY + 4,
-      handX + 2,
-      handY
-    );
+    ctx.quadraticCurveTo(shoulderRX + 8, shoulderRY + 10, handX + 4, handY);
     ctx.stroke();
 
     ctx.fillStyle = '#0a0e18';
     ctx.beginPath();
-    ctx.arc(handX, handY, 4, 0, Math.PI * 2);
+    ctx.arc(handX, handY, 4.5, 0, Math.PI * 2);
     ctx.fill();
 
-    const swordLen = 34;
-    const swordEndX = handX + Math.cos(pose.swordAngle) * swordLen;
-    const swordEndY = handY + Math.sin(pose.swordAngle) * swordLen;
+    const swordLen = 40;
+    const swordAngle = pose.swordAngle;
+    const swordEndX = handX + Math.cos(swordAngle) * swordLen;
+    const swordEndY = handY + Math.sin(swordAngle) * swordLen;
 
     ctx.strokeStyle = '#3a2412';
     ctx.lineWidth = 5;
-    const hiltEndX = handX - Math.cos(pose.swordAngle) * 4;
-    const hiltEndY = handY - Math.sin(pose.swordAngle) * 4;
+    const hiltEndX = handX - Math.cos(swordAngle) * 6;
+    const hiltEndY = handY - Math.sin(swordAngle) * 6;
     ctx.beginPath();
     ctx.moveTo(hiltEndX, hiltEndY);
     ctx.lineTo(handX, handY);
     ctx.stroke();
 
     ctx.strokeStyle = '#1a1a1a';
-    ctx.lineWidth = 4;
-    const guardDist = 5;
-    const guardX = handX + Math.cos(pose.swordAngle) * guardDist;
-    const guardY = handY + Math.sin(pose.swordAngle) * guardDist;
-    const guardPerpX = Math.cos(pose.swordAngle + Math.PI / 2) * 6;
-    const guardPerpY = Math.sin(pose.swordAngle + Math.PI / 2) * 6;
+    ctx.lineWidth = 4.5;
+    const guardDist = 6;
+    const guardX = handX + Math.cos(swordAngle) * guardDist;
+    const guardY = handY + Math.sin(swordAngle) * guardDist;
+    const guardPerpX = Math.cos(swordAngle + Math.PI / 2) * 7;
+    const guardPerpY = Math.sin(swordAngle + Math.PI / 2) * 7;
     ctx.beginPath();
     ctx.moveTo(guardX - guardPerpX, guardY - guardPerpY);
     ctx.lineTo(guardX + guardPerpX, guardY + guardPerpY);
     ctx.stroke();
 
     ctx.strokeStyle = '#c8d6e5';
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 3.5;
     ctx.beginPath();
     ctx.moveTo(guardX, guardY);
     ctx.lineTo(swordEndX, swordEndY);
     ctx.stroke();
 
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(guardX + Math.cos(swordAngle + 1.2) * 2, guardY + Math.sin(swordAngle + 1.2) * 2);
+    ctx.lineTo(swordEndX - Math.cos(swordAngle) * 4, swordEndY - Math.sin(swordAngle) * 4);
+    ctx.stroke();
+
     ctx.fillStyle = '#e8eef5';
     ctx.beginPath();
-    ctx.arc(swordEndX, swordEndY, 2, 0, Math.PI * 2);
+    ctx.arc(swordEndX, swordEndY, 2.5, 0, Math.PI * 2);
     ctx.fill();
   }
 }
