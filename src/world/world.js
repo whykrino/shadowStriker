@@ -5,6 +5,7 @@ const MAP_COLS = 84;
 const MAP_ROWS = 36;
 const WALL_THICKNESS = 3;
 const COLLISION_CELL = 128;
+const CHUNK_SIZE = 512;
 
 const C = {
   groundBase: '#080c14',
@@ -30,7 +31,10 @@ class World {
     this.mountains = [];
     this.ruins = [];
     this.paths = [];
-    this.mapCanvas = null;
+    this.chunks = [];
+    this.chunksCols = 0;
+    this.chunksRows = 0;
+    this.minimapCanvas = null;
     this.collisionGrid = null;
     this.gridCols = 0;
     this.gridRows = 0;
@@ -290,6 +294,12 @@ class World {
 
   buildTreeSprites() {
     this.treeSprites = [];
+    let seed = 1337;
+    const seededRandom = () => {
+      let x = Math.sin(seed++) * 10000;
+      return x - Math.floor(x);
+    };
+
     for (let i = 0; i < 10; i++) {
       const w = 160;
       const h = 180;
@@ -299,8 +309,8 @@ class World {
       const ctx = canvas.getContext('2d');
       const cx = w / 2;
       const cy = h - 20;
-      const th = 80 + Math.random() * 30;
-      const tr = 20 + Math.random() * 22;
+      const th = 80 + seededRandom() * 30;
+      const tr = 20 + seededRandom() * 22;
 
       ctx.fillStyle = '#0a0e14';
       ctx.fillRect(cx - 4, cy - th * 0.4, 8, th * 0.4);
@@ -333,16 +343,10 @@ class World {
   }
 
   buildMapCanvas() {
-    this.mapCanvas = document.createElement('canvas');
-    this.mapCanvas.width = 1024;
-    this.mapCanvas.height = 512;
-    const ctx = this.mapCanvas.getContext('2d');
-
-    const scaleX = this.mapCanvas.width / this.width;
-    const scaleY = this.mapCanvas.height / this.height;
-    
-    ctx.save();
-    ctx.scale(scaleX, scaleY);
+    this.worldCanvas = document.createElement('canvas');
+    this.worldCanvas.width = this.width;
+    this.worldCanvas.height = this.height;
+    const ctx = this.worldCanvas.getContext('2d');
 
     ctx.fillStyle = C.groundBase;
     ctx.fillRect(0, 0, this.width, this.height);
@@ -420,7 +424,12 @@ class World {
       else if (r.type === 'rubble') this.renderRubble(ctx, r.x, r.y, r);
       else if (r.type === 'ruinWall') this.renderRuinWall(ctx, r.x, r.y, r);
     }
-    ctx.restore();
+
+    this.minimapCanvas = document.createElement('canvas');
+    this.minimapCanvas.width = 1024;
+    this.minimapCanvas.height = 512;
+    const mctx = this.minimapCanvas.getContext('2d');
+    mctx.drawImage(this.worldCanvas, 0, 0, this.minimapCanvas.width, this.minimapCanvas.height);
   }
 
   makeTree(x, y) {
@@ -504,12 +513,11 @@ class World {
   }
 
   renderGround(ctx, camX, camY, viewW, viewH) {
-    const sx = camX * (this.mapCanvas.width / this.width);
-    const sy = camY * (this.mapCanvas.height / this.height);
-    const sw = viewW * (this.mapCanvas.width / this.width);
-    const sh = viewH * (this.mapCanvas.height / this.height);
-
-    ctx.drawImage(this.mapCanvas, sx, sy, sw, sh, 0, 0, viewW, viewH);
+    ctx.drawImage(
+      this.worldCanvas,
+      camX, camY, viewW, viewH,
+      0, 0, viewW, viewH
+    );
   }
 
   renderZoneOverlay(ctx, camX, camY, zones) {
@@ -524,8 +532,7 @@ class World {
       if (sx + r < 0 || sx - r > ctx.canvas.width) continue;
       if (sy + r < 0 || sy - r > ctx.canvas.height) continue;
 
-      const segments = 60;
-      const angleStep = (Math.PI * 2) / segments;
+      const angleStep = (Math.PI * 2) / 60;
       const startAngle = this._dashOffset * 0.05;
 
       ctx.save();
@@ -534,14 +541,10 @@ class World {
       ctx.lineWidth = 7;
       ctx.lineCap = 'round';
       ctx.globalAlpha = 0.6;
-      ctx.shadowColor = zone.color;
-      ctx.shadowBlur = 25;
 
-      for (let j = 0; j < segments; j++) {
-        if (j % 2 !== 0) continue;
+      for (let j = 0; j < 60; j += 2) {
         const a1 = startAngle + j * angleStep;
         const a2 = a1 + angleStep * 0.8;
-        
         ctx.beginPath();
         ctx.arc(sx, sy, r, a1, a2);
         ctx.stroke();

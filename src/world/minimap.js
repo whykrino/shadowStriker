@@ -63,24 +63,14 @@ class Minimap {
     const actualSrcY = Utils.clamp(srcY, 0, this.world.height - viewH);
 
     displayCtx.drawImage(
-      this.world.mapCanvas,
-      actualSrcX * (this.world.mapCanvas.width / this.world.width), actualSrcY * (this.world.mapCanvas.height / this.world.height),
-      viewW * (this.world.mapCanvas.width / this.world.width), viewH * (this.world.mapCanvas.height / this.world.height),
+      this.world.minimapCanvas,
+      actualSrcX * (this.world.minimapCanvas.width / this.world.width), actualSrcY * (this.world.minimapCanvas.height / this.world.height),
+      viewW * (this.world.minimapCanvas.width / this.world.width), viewH * (this.world.minimapCanvas.height / this.world.height),
       px, py, w, h
     );
 
     const mapScaleX = w / viewW;
     const mapScaleY = h / viewH;
-
-    displayCtx.fillStyle = 'rgba(30, 44, 62, 0.5)';
-    for (const p of this.world.props) {
-      if (p.type === 'tree') {
-        const mx = px + (p.x - actualSrcX) * mapScaleX;
-        const my = py + (p.y - actualSrcY) * mapScaleY;
-        if (mx < px || mx > px + w || my < py || my > py + h) continue;
-        displayCtx.fillRect(mx - 1, my - 1, 2, 2);
-      }
-    }
 
     for (let i = 0; i < this.zones.length; i++) {
       const zone = this.zones[i];
@@ -88,29 +78,13 @@ class Minimap {
       const zy = py + (zone.y - actualSrcY) * mapScaleY;
       const zr = zone.radius * mapScaleX;
 
-      const segments = 60;
-      const angleStep = (Math.PI * 2) / segments;
-      const startAngle = this.world._dashOffset * 0.05;
-
-      displayCtx.save();
       displayCtx.strokeStyle = zone.color;
       displayCtx.lineWidth = 2.5;
-      displayCtx.lineCap = 'round';
       displayCtx.globalAlpha = 0.5;
-      displayCtx.shadowColor = zone.color;
-      displayCtx.shadowBlur = 8;
-
-      for (let j = 0; j < segments; j++) {
-        if (j % 2 !== 0) continue;
-        const a1 = startAngle + j * angleStep;
-        const a2 = a1 + angleStep * 0.8;
-        
-        displayCtx.beginPath();
-        displayCtx.arc(zx, zy, zr, a1, a2);
-        displayCtx.stroke();
-      }
-
-      displayCtx.restore();
+      displayCtx.beginPath();
+      displayCtx.arc(zx, zy, zr, 0, Math.PI * 2);
+      displayCtx.stroke();
+      displayCtx.globalAlpha = 1;
     }
 
     for (let i = 0; i < monsters.length; i++) {
@@ -175,17 +149,10 @@ class Minimap {
     displayCtx.fillStyle = '#0b1219';
     displayCtx.fillRect(px, py, w, h);
 
-    displayCtx.drawImage(this.world.mapCanvas, px, py, w, h);
+    displayCtx.drawImage(this.world.minimapCanvas, px, py, w, h);
 
     const mapScaleX = w / this.world.width;
     const mapScaleY = h / this.world.height;
-
-    displayCtx.fillStyle = 'rgba(30, 44, 62, 0.5)';
-    for (const p of this.world.props) {
-      if (p.type === 'tree') {
-        displayCtx.fillRect(px + p.x * mapScaleX - 1, py + p.y * mapScaleY - 1, 2, 2);
-      }
-    }
 
     for (let i = 0; i < this.zones.length; i++) {
       const zone = this.zones[i];
@@ -193,29 +160,13 @@ class Minimap {
       const zy = py + zone.y * mapScaleY;
       const zr = zone.radius * mapScaleX;
 
-      const segments = 60;
-      const angleStep = (Math.PI * 2) / segments;
-      const startAngle = this.world._dashOffset * 0.05;
-
-      displayCtx.save();
       displayCtx.strokeStyle = zone.color;
       displayCtx.lineWidth = 4;
-      displayCtx.lineCap = 'round';
       displayCtx.globalAlpha = 0.5;
-      displayCtx.shadowColor = zone.color;
-      displayCtx.shadowBlur = 12;
-
-      for (let j = 0; j < segments; j++) {
-        if (j % 2 !== 0) continue;
-        const a1 = startAngle + j * angleStep;
-        const a2 = a1 + angleStep * 0.8;
-        
-        displayCtx.beginPath();
-        displayCtx.arc(zx, zy, zr, a1, a2);
-        displayCtx.stroke();
-      }
-
-      displayCtx.restore();
+      displayCtx.beginPath();
+      displayCtx.arc(zx, zy, zr, 0, Math.PI * 2);
+      displayCtx.stroke();
+      displayCtx.globalAlpha = 1;
 
       if (playerLevel < zone.recommendedLevel) {
         displayCtx.fillStyle = 'rgba(3, 5, 12, 0.9)';
