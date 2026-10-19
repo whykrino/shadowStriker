@@ -110,6 +110,8 @@ class AudioSystem {
     this.samples.notifyInfo = await this._renderNotify(660, 880, 'sine');
     this.samples.notifyAbility = await this._renderNotify(523, 784, 'triangle');
     this.samples.notifyDanger = await this._renderNotify(220, 180, 'sawtooth');
+    this.samples.blockHit = await this._renderBlockHit();
+    this.samples.blockBreak = await this._renderBlockBreak();
   }
 
   async _render(durationSec, buildFn) {
@@ -436,6 +438,56 @@ class AudioSystem {
     });
   }
 
+  _renderBlockHit() {
+    return this._render(0.25, (ctx) => {
+      const osc = ctx.createOscillator();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(900, 0);
+      osc.frequency.exponentialRampToValueAtTime(1500, 0.05);
+
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, 0);
+      gain.gain.exponentialRampToValueAtTime(0.18, 0.005);
+      gain.gain.exponentialRampToValueAtTime(0.0001, 0.2);
+
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 2000;
+      bp.Q.value = 2;
+
+      osc.connect(bp);
+      bp.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(0);
+      osc.stop(0.25);
+    });
+  }
+
+  _renderBlockBreak() {
+    return this._render(0.4, (ctx) => {
+      const osc = ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(400, 0);
+      osc.frequency.exponentialRampToValueAtTime(90, 0.35);
+
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, 0);
+      gain.gain.exponentialRampToValueAtTime(0.28, 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, 0.4);
+
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.setValueAtTime(2000, 0);
+      lp.frequency.exponentialRampToValueAtTime(400, 0.4);
+
+      osc.connect(lp);
+      lp.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(0);
+      osc.stop(0.4);
+    });
+  }
+
   _effectiveMaster() { return this.muted ? 0 : this._baseGains.master * this.masterVolume; }
   _effectiveMusic() { return this._baseGains.music * this.musicVolume; }
   _effectiveSfx() { return this._baseGains.sfx * this.sfxVolume; }
@@ -486,40 +538,12 @@ class AudioSystem {
   notificationAbility() { this._playSample(this.samples.notifyAbility, 0.42); }
   notificationDanger()  { this._playSample(this.samples.notifyDanger, 0.5); }
   enemyShoot() { this._playSample(this.samples.hitSoft, 0.28); }
+  blockHit()   { this._playSample(this.samples.blockHit, 0.55); }
+  blockBreak() { this._playSample(this.samples.blockBreak, 0.6); }
 
   updateListener() {}
   updatePlayer() {}
   enemyRoar() {}
-
-  blockHit() {
-    if (!this.ctx) return;
-    const osc = this.ctx.createOscillator();
-    osc.type = 'square';
-    osc.frequency.setValueAtTime(800, this.ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(1200, this.ctx.currentTime + 0.05);
-    const gain = this.ctx.createGain();
-    gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
-    osc.connect(gain);
-    gain.connect(this.sfxGain);
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.15);
-  }
-
-  blockBreak() {
-    if (!this.ctx) return;
-    const osc = this.ctx.createOscillator();
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(300, this.ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 0.3);
-    const gain = this.ctx.createGain();
-    gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
-    osc.connect(gain);
-    gain.connect(this.sfxGain);
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.35);
-  }
 
   startMusic() {
     if (!this.ctx || this.musicPlaying) return;
@@ -544,81 +568,201 @@ class AudioSystem {
 
   async _buildMusicSample() {
     const sr = this.ctx.sampleRate;
-    const duration = 16.0;
+    const duration = 32.0;
     const ctx = new OfflineAudioContext(2, Math.floor(sr * duration), sr);
 
-    const notes = [220, 261.63, 293.66, 329.63, 392.00, 440.00, 523.25, 587.33];
-    const pattern = [
-      [0.0, 2], [0.4, 4], [0.8, 3], [1.2, 5], [1.6, 4], [2.0, 2], [2.4, 0],
-      [2.8, 4], [3.2, 5], [3.6, 6], [4.0, 4], [4.4, 2], [4.8, 3], [5.2, 5],
-      [5.6, 7], [6.0, 6], [6.4, 4], [6.8, 5], [7.2, 3], [7.6, 2], [8.0, 1],
-      [8.4, 3], [8.8, 4], [9.2, 6], [9.6, 5], [10.0, 4], [10.4, 2],
-      [10.8, 3], [11.2, 5], [11.6, 4], [12.0, 3], [12.4, 1], [12.8, 2],
-      [13.2, 4], [13.6, 3], [14.0, 5], [14.4, 4], [14.8, 2], [15.2, 1], [15.6, 2]
-    ];
+    const master = ctx.createGain();
+    master.gain.value = 0.8;
+    master.connect(ctx.destination);
 
-    for (let i = 0; i < pattern.length; i++) {
-      const t = pattern[i][0];
-      const freq = notes[pattern[i][1]];
+    const reverb = ctx.createConvolver();
+    reverb.buffer = this._buildImpulseFor(ctx, 2.6, 2.0);
+    const reverbGain = ctx.createGain();
+    reverbGain.gain.value = 0.4;
+    reverb.connect(reverbGain);
+    reverbGain.connect(master);
 
+    const d = 2;
+    const mid = 293.66;
+    const low = 146.83;
+    const high = 587.33;
+
+    const pluck = (t, freq, vol, decay) => {
       const osc = ctx.createOscillator();
       osc.type = 'triangle';
       osc.frequency.value = freq;
 
       const osc2 = ctx.createOscillator();
       osc2.type = 'sine';
-      osc2.frequency.value = freq * 2;
-      osc2.detune.value = -5;
+      osc2.frequency.value = freq * 2.005;
 
-      const gain = ctx.createGain();
-      const dur = 1.2;
-      
-      gain.gain.setValueAtTime(0.0001, t);
-      gain.gain.exponentialRampToValueAtTime(0.15, t + 0.05);
-      gain.gain.exponentialRampToValueAtTime(0.08, t + 0.3);
-      gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + 0.008);
+      g.gain.exponentialRampToValueAtTime(vol * 0.35, t + decay * 0.4);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + decay);
 
       const g2 = ctx.createGain();
       g2.gain.setValueAtTime(0.0001, t);
-      g2.gain.exponentialRampToValueAtTime(0.05, t + 0.02);
-      g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+      g2.gain.exponentialRampToValueAtTime(vol * 0.18, t + 0.01);
+      g2.gain.exponentialRampToValueAtTime(0.0001, t + decay * 0.6);
 
-      const filter = ctx.createBiquadFilter();
-      filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(2000, t);
-      filter.frequency.exponentialRampToValueAtTime(800, t + dur);
-      filter.Q.value = 0.5;
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.setValueAtTime(4200, t);
+      lp.frequency.exponentialRampToValueAtTime(900, t + decay);
+      lp.Q.value = 0.6;
 
-      osc.connect(filter);
+      osc.connect(g);
       osc2.connect(g2);
-      g2.connect(filter);
-      filter.connect(gain);
-      gain.connect(ctx.destination);
+      g.connect(lp);
+      g2.connect(lp);
+      lp.connect(master);
+      lp.connect(reverb);
 
-      osc.start(t);
-      osc.stop(t + dur);
-      osc2.start(t);
-      osc2.stop(t + 0.6);
-    }
+      osc.start(t); osc.stop(t + decay + 0.1);
+      osc2.start(t); osc2.stop(t + decay * 0.7);
+    };
 
-    const drone = ctx.createOscillator();
-    drone.type = 'sine';
-    drone.frequency.value = 110;
-    const droneGain = ctx.createGain();
-    droneGain.gain.setValueAtTime(0.0001, 0);
-    droneGain.gain.linearRampToValueAtTime(0.05, 1.0);
-    droneGain.gain.linearRampToValueAtTime(0.05, 15.0);
-    droneGain.gain.linearRampToValueAtTime(0.0001, 16.0);
-    const droneFilter = ctx.createBiquadFilter();
-    droneFilter.type = 'lowpass';
-    droneFilter.frequency.value = 300;
+    const bass = (t, freq, vol, dur) => {
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
 
-    drone.connect(droneFilter);
-    droneFilter.connect(droneGain);
-    droneGain.connect(ctx.destination);
-    drone.start(0);
-    drone.stop(16);
+      const osc2 = ctx.createOscillator();
+      osc2.type = 'triangle';
+      osc2.frequency.value = freq * 2;
+
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(vol * 0.5, t + dur * 0.5);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+
+      const g2 = ctx.createGain();
+      g2.gain.setValueAtTime(0.0001, t);
+      g2.gain.exponentialRampToValueAtTime(vol * 0.3, t + 0.02);
+      g2.gain.exponentialRampToValueAtTime(0.0001, t + dur * 0.6);
+
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 600;
+
+      osc.connect(g);
+      osc2.connect(g2);
+      g.connect(lp);
+      g2.connect(lp);
+      lp.connect(master);
+      osc.start(t); osc.stop(t + dur + 0.05);
+      osc2.start(t); osc2.stop(t + dur * 0.7);
+    };
+
+    const bell = (t, freq, vol) => {
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+
+      const osc2 = ctx.createOscillator();
+      osc2.type = 'sine';
+      osc2.frequency.value = freq * 2.76;
+
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 1.8);
+
+      const g2 = ctx.createGain();
+      g2.gain.setValueAtTime(0.0001, t);
+      g2.gain.exponentialRampToValueAtTime(vol * 0.4, t + 0.004);
+      g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
+
+      osc.connect(g);
+      osc2.connect(g2);
+      g.connect(master);
+      g.connect(reverb);
+      g2.connect(reverb);
+      osc.start(t); osc.stop(t + 1.9);
+      osc2.start(t); osc2.stop(t + 1.0);
+    };
+
+    const phrase1 = [
+      [0.0, d], [0.5, mid], [0.75, high], [1.0, mid], [1.5, low], [1.75, d], [2.0, mid],
+      [2.5, low], [3.0, d], [3.5, mid], [3.75, high], [4.0, mid], [4.5, low], [5.0, d],
+    ];
+    const phrase2 = [
+      [6.0, low], [6.5, d], [7.0, mid], [7.5, high], [7.75, mid], [8.0, d], [8.5, mid],
+      [9.0, low], [9.5, d], [10.0, mid], [10.5, high], [11.0, mid], [11.5, low],
+    ];
+
+    const playPhrase = (base, arr, transpose, vol) => {
+      for (let i = 0; i < arr.length; i++) {
+        const t = base + arr[i][0];
+        const f = arr[i][1] * transpose;
+        pluck(t, f, vol, 1.1);
+      }
+    };
+
+    playPhrase(0, phrase1, 1, 0.22);
+    playPhrase(12, phrase1, 1, 0.22);
+    playPhrase(6, phrase2, 0.5, 0.26);
+    playPhrase(18, phrase2, 0.5, 0.26);
+
+    playPhrase(24, phrase1, 2, 0.16);
+    playPhrase(24, phrase2, 1, 0.14);
+
+    bass(0, low, 0.14, 1.6);
+    bass(1.6, low, 0.1, 1.0);
+    bass(3.0, low, 0.13, 1.5);
+    bass(6.0, low, 0.14, 1.8);
+    bass(8.5, low, 0.1, 1.4);
+    bass(12, low, 0.14, 1.6);
+    bass(13.6, low, 0.1, 1.0);
+    bass(15, low, 0.13, 1.5);
+    bass(18, low, 0.14, 1.8);
+    bass(20.5, low, 0.1, 1.4);
+    bass(24, low, 0.14, 1.6);
+    bass(25.6, low, 0.1, 1.0);
+    bass(27, low, 0.13, 1.5);
+    bass(30, low, 0.14, 1.8);
+
+    bell(2.0, high, 0.14);
+    bell(8.0, high, 0.12);
+    bell(14.0, high, 0.14);
+    bell(20.0, high, 0.12);
+    bell(26.0, high, 0.14);
+    bell(31.0, high, 0.12);
+
+    const shimmer = ctx.createOscillator();
+    shimmer.type = 'sine';
+    shimmer.frequency.value = 293.66;
+    const shimGain = ctx.createGain();
+    shimGain.gain.setValueAtTime(0.0001, 0);
+    shimGain.gain.linearRampToValueAtTime(0.015, 2);
+    shimGain.gain.linearRampToValueAtTime(0.015, 14);
+    shimGain.gain.linearRampToValueAtTime(0.0001, 16);
+    shimGain.gain.linearRampToValueAtTime(0.015, 18);
+    shimGain.gain.linearRampToValueAtTime(0.015, 30);
+    shimGain.gain.linearRampToValueAtTime(0.0001, 32);
+    shimmer.connect(shimGain);
+    shimGain.connect(reverb);
+    shimmer.start(0);
+    shimmer.stop(32);
 
     return await ctx.startRendering();
+  }
+
+  _buildImpulseFor(ctx, duration, decay) {
+    const sr = ctx.sampleRate;
+    const len = Math.floor(sr * duration);
+    const impulse = ctx.createBuffer(2, len, sr);
+    for (let ch = 0; ch < 2; ch++) {
+      const data = impulse.getChannelData(ch);
+      for (let i = 0; i < len; i++) {
+        const t = i / len;
+        const env = Math.pow(1 - t, decay);
+        data[i] = (Math.random() * 2 - 1) * env * 0.5;
+      }
+    }
+    return impulse;
   }
 }
