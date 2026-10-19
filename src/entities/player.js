@@ -29,6 +29,7 @@ class Player {
     this.chargeReady = false;
     this.isCharging = false;
     this.chargedAttack = false;
+    this.chargedAmount = 0;
     this._prevSpaceDown = false;
 
     this._isSpinAttackActive = false;
@@ -38,6 +39,10 @@ class Player {
     this.isBlocking = false;
     this.blockCooldown = 0;
     this.blockTimer = 0;
+    this.blockHitsLeft = 6;
+    this.blockMaxHits = 6;
+    this.blockRechargeTimer = 0;
+    this.blockRechargeTime = 2.5;
 
     this.dashTimer = 0;
     this.dashCooldown = 0;
@@ -82,6 +87,8 @@ class Player {
 
     this.maxDashCharges = 3 + Math.floor(t.dashCharges);
     if (this.dashCharges > this.maxDashCharges) this.dashCharges = this.maxDashCharges;
+    this.blockMaxHits = 6 + Math.floor(t.blockCharges);
+    if (this.blockHitsLeft > this.blockMaxHits) this.blockHitsLeft = this.blockMaxHits;
 
     if (this.shieldMax !== t.arcaneShield) {
       this.shieldMax = t.arcaneShield;
@@ -105,15 +112,27 @@ class Player {
   takeDamage(amount, isMelee) {
     if (this.invulnTimer > 0 || !this.alive) return;
 
-    if (this.isBlocking && isMelee && this.blockCooldown <= 0) {
-      const blockCap = 10 + this.stats.level * 2;
-      if (amount <= blockCap) {
-        return;
-      } else {
-        amount -= blockCap;
-        this.blockCooldown = 1.5;
+    if (this.isBlocking && this.blockHitsLeft > 0) {
+      const blockCap = isMelee
+        ? 10 + this.stats.level * 2
+        : (10 + this.stats.level * 2) * 0.5;
+
+      this.blockHitsLeft--;
+      this.audio.blockHit();
+
+      if (this.blockHitsLeft <= 0) {
         this.isBlocking = false;
+        this.audio.blockBreak();
       }
+
+      if (amount <= blockCap) {
+        this.invulnTimer = 0.3;
+        return;
+      }
+
+      amount -= blockCap;
+      this.isBlocking = false;
+      this.audio.blockBreak();
     }
 
     const t = this.talents.effects;
@@ -150,15 +169,16 @@ class Player {
     this.hp = this._cachedMaxHp;
   }
 
-  startAttack(charged) {
+  startAttack(charged, chargeAmount) {
     if (!this.alive || this.attackTimer > 0) return;
     if (this.attackCooldown > 0) { this.attackQueued = true; return; }
     
     this.attackTimer = this.attackDuration;
-    this.attackCooldown = charged ? 0.35 : 0.35;
+    this.attackCooldown = 0.35;
     this.attackHitApplied = false;
     this.attackQueued = false;
     this.chargedAttack = !!charged;
+    this.chargedAmount = chargeAmount || 0;
     this._swingSoundPlayed = false;
     this.spinCounter++;
   }
@@ -175,6 +195,7 @@ class Player {
     this.attackArc = Math.PI * 2;
     this.attackHitApplied = false;
     this.chargedAttack = false;
+    this.chargedAmount = 0;
     this._swingSoundPlayed = false;
     this._isSpinAttackActive = true;
     this._spinVisualAngle = 0;
@@ -205,7 +226,6 @@ class Player {
     this.hitShake = Math.max(0, this.hitShake - dt);
     this.levelUpFlash = Math.max(0, this.levelUpFlash - dt);
     this.damageFlash = Math.max(0, this.damageFlash - dt);
-    this.blockCooldown = Math.max(0, this.blockCooldown - dt);
 
     if (this.attackTimer > 0) {
       const p = 1 - this.attackTimer / this.attackDuration;
@@ -249,15 +269,27 @@ class Player {
       this.startSpinAttack();
     }
 
-    this.isBlocking = input.mouseRightDown && this.blockCooldown <= 0 && this.attackTimer <= 0;
+    if (this.blockHitsLeft < this.blockMaxHits) {
+      this.blockRechargeTimer -= dt;
+      if (this.blockRechargeTimer <= 0) {
+        this.blockHitsLeft++;
+        this.blockRechargeTimer = this.blockRechargeTime;
+      }
+    } else {
+      this.blockRechargeTimer = this.blockRechargeTime;
+    }
+
+    this.isBlocking = input.mouseRightDown
+      && this.blockHitsLeft > 0
+      && this.attackTimer <= 0;
     if (this.isBlocking) {
       this.blockTimer += dt;
     } else {
       this.blockTimer = 0;
     }
 
-    if (canCharge) {
-      if (spaceJustPressed && this.attackTimer <= 0 && !this.isBlocking) {
+    if (canCharge && !this.isBlocking) {
+      if (spaceJustPressed && this.attackTimer <= 0) {
         this.isCharging = true;
         this.chargeTime = 0;
       }
@@ -265,35 +297,31 @@ class Player {
       if (this.isCharging && spaceDown) {
         this.chargeTime += dt;
         if (this.chargeTime >= this.chargeHardCap) {
+          const cap = this.chargeHardCap;
           this.isCharging = false;
-          this.attackTimer = this.attackDuration;
-          this.attackCooldown = 0.35;
-          this.attackHitApplied = false;
-          this.chargedAttack = true;
-          this._swingSoundPlayed = false;
-          this.spinCounter++;
           this.chargeTime = 0;
+          this.startAttack(true, cap);
         }
       }
 
       if (this.isCharging && spaceJustReleased) {
+        const amt = this.chargeTime;
         this.isCharging = false;
-        this.attackTimer = this.attackDuration;
-        this.attackCooldown = 0.35;
-        this.attackHitApplied = false;
-        this.chargedAttack = true;
-        this._swingSoundPlayed = false;
-        this.spinCounter++;
+        this.chargeTime = 0;
+        this.startAttack(true, amt);
       }
+    } else if (this.isBlocking && this.isCharging) {
+      this.isCharging = false;
+      this.chargeTime = 0;
     }
 
     this._prevSpaceDown = spaceDown;
 
     if (input.mouseDown && !this.isBlocking) {
-      this.startAttack(false);
+      this.startAttack(false, 0);
     } else if (this.attackQueued && this.attackCooldown <= 0 && this.attackTimer <= 0) {
       this.attackQueued = false;
-      this.startAttack(false);
+      this.startAttack(false, 0);
     }
 
     const mv = input.moveVector;
@@ -313,8 +341,7 @@ class Player {
         && input.consumeDash()
         && this.dashTimer <= 0
         && this.dashCharges > 0
-        && mag > 0
-        && !this.isBlocking) {
+        && mag > 0) {
       this.dashCharges--;
       this.dashTimer = this.dashDuration;
       this.invulnTimer = Math.max(this.invulnTimer, this.dashDuration + 0.1);
@@ -330,10 +357,11 @@ class Player {
     }
 
     let vx = 0, vy = 0;
-    if (mag > 0 && !this._isSpinAttackActive && !this.isBlocking) {
+    if (mag > 0 && !this._isSpinAttackActive) {
       const nx = mv.x / mag;
       const ny = mv.y / mag;
       let spd = this.dashTimer > 0 ? this._cachedDash : this._cachedSpeed;
+      if (this.isBlocking) spd *= 0.45;
       if (this.buffType === 'speed' && this.buffTimer > 0) spd *= 1.5;
       vx = nx * spd;
       vy = ny * spd;
@@ -351,7 +379,7 @@ class Player {
       this.facing = this.targetFacing + this._spinVisualAngle;
     }
 
-    if (mag > 0) this.walkPhase += dt * 15;
+    if (mag > 0) this.walkPhase += dt * 15 * (this.isBlocking ? 0.6 : 1);
     this.breathePhase += dt * 2.5;
 
     if (this.attackTimer > 0) {
