@@ -26,14 +26,6 @@
   </div>
 </div>
 
-<div id="block-indicator" class="hidden">
-  <canvas id="block-canvas" width="120" height="120"></canvas>
-  <div id="block-label">
-    <span class="block-icon">⛨</span>
-    <span id="block-count">3</span>
-  </div>
-</div>
-
 <div id="dash-indicator" class="hidden">
   <canvas id="dash-canvas" width="120" height="120"></canvas>
   <div id="dash-label">
@@ -72,9 +64,7 @@
     <span class="ctrl-sep"></span>
     <span><b>M</b> карта</span>
     <span class="ctrl-sep"></span>
-    <span><b>I</b> звук</span>
-    <span class="ctrl-sep"></span>
-    <span><b>ESC</b> закрыть</span>
+    <span><b>ESC</b> пауза</span>
   </div>
 </div>
 
@@ -109,7 +99,7 @@
   </div>
 </div>
 
-<div class="menu-overlay" id="audio-menu">
+<div class="menu-overlay" id="audio-menu" style="z-index: 60;">
   <div class="menu-panel" style="width: 560px;">
     <div class="menu-header">
       <h2>ЗВУК</h2>
@@ -141,8 +131,7 @@
     </div>
 
     <button class="mute-btn" id="mute-btn">ВЫКЛЮЧИТЬ ЗВУК</button>
-
-    <div class="menu-footer">I ОТКРЫТЬ/ЗАКРЫТЬ · ESC ЗАКРЫТЬ</div>
+    <button class="menu-back-btn" id="audio-back-btn">НАЗАД</button>
   </div>
 </div>
 
@@ -187,6 +176,28 @@
   <h1>DEAD</h1>
 </div>
 
+<div id="main-menu" class="menu-overlay show" style="z-index: 50; background: transparent; align-items: center; justify-content: flex-start; padding-left: 10vw;">
+  <canvas id="menu-bg-canvas" style="position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1;"></canvas>
+  <div class="menu-panel" style="width: 420px; background: rgba(10,15,25,0.85); border: 1px solid rgba(74, 158, 255, 0.2); border-radius: 6px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); padding: 40px;">
+    <div class="menu-header" style="justify-content: center; border-bottom: none; margin-bottom: 35px;">
+      <h2 style="letter-spacing: 10px; font-size: 24px; color: #e8eef5; text-shadow: 0 0 10px rgba(74, 158, 255, 0.5);">SHADOW STRIKER</h2>
+    </div>
+    <button class="menu-btn" id="btn-start">НАЧАТЬ ИГРУ</button>
+    <button class="menu-btn" id="btn-audio">НАСТРОЙКИ ЗВУКА</button>
+  </div>
+</div>
+
+<div id="pause-menu" class="menu-overlay" style="z-index: 40; background: rgba(3, 5, 12, 0.5); backdrop-filter: blur(4px); align-items: center; justify-content: center;">
+  <div class="menu-panel" style="width: 400px; border-color: rgba(74, 158, 255, 0.5); border-radius: 12px; box-shadow: 0 20px 50px rgba(0,0,0,0.5);">
+    <div class="menu-header" style="justify-content: center; border-bottom: none;">
+      <h2 style="letter-spacing: 6px;">ПАУЗА</h2>
+    </div>
+    <button class="menu-btn" id="btn-resume">ПРОДОЛЖИТЬ</button>
+    <button class="menu-btn" id="btn-restart">НАЧАТЬ ЗАНОВО</button>
+    <button class="menu-btn" id="btn-pause-audio">НАСТРОЙКИ ЗВУКА</button>
+  </div>
+</div>
+
 <script src="src/core/utils.js"></script>
 <script src="src/core/input.js"></script>
 <script src="src/core/particles.js"></script>
@@ -206,6 +217,7 @@
 <script src="src/entities/player.js"></script>
 <script src="src/ui/codex_ui.js"></script>
 <script src="src/ui/hud.js"></script>
+<script src="src/ui/menu_scene.js"></script>
 <script src="src/main.js"></script>
 
 <script src="src/systems/dev_instruments.js"></script>

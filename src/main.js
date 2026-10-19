@@ -23,6 +23,18 @@ class Game {
     this.resize();
     window.addEventListener('resize', () => this.resize());
 
+    this.state = 'menu';
+    this.menuBg = new MenuBackground();
+
+    this.uiWrapper = [
+      document.getElementById('hud'), 
+      document.getElementById('controls'), 
+      document.getElementById('notifications'), 
+      document.getElementById('dash-indicator'), 
+      document.getElementById('block-indicator')
+    ];
+    document.getElementById('main-menu').classList.add('show');
+
     this.audio = new AudioSystem();
     this.input = new Input();
     this.world = new World();
@@ -36,6 +48,8 @@ class Game {
     this.talents = new TalentSystem();
     this.talents.load();
 
+    this.setupMenus();
+
     this.monsterPool = new MonsterPool();
     this.bulletPool = new BulletPool();
     this.damageNumbers = new DamageNumberPool();
@@ -45,6 +59,7 @@ class Game {
     this.zones.attachBulletPool(this.bulletPool);
 
     const spawn = this.findSafeSpawn();
+    this.spawnPoint = spawn;
     this.world.buildRuins(spawn.x, spawn.y);
 
     this.player = new Player(spawn.x, spawn.y, this.stats, this.abilities, this.talents);
@@ -69,6 +84,7 @@ class Game {
 
     this.hud.update(this.player.hp, this.stats.maxHp, this.stats.exp, this.stats.expToNext, this.stats.level);
     this.hud.updateDash(this.player, this.abilities.has('dash'));
+    this.hud.updateBlock(this.player, true);
 
     this.notifications.info(
       'ДОБРО ПОЖАЛОВАТЬ',
@@ -83,6 +99,42 @@ class Game {
     if (typeof CheatMenu !== 'undefined') {
       this.cheatMenu = new CheatMenu(this);
     }
+  }
+
+  setupMenus() {
+    const toggleUI = (show) => {
+      this.uiWrapper.forEach(el => {
+        if (el) el.style.display = show ? '' : 'none';
+      });
+    };
+
+    toggleUI(false);
+
+    document.getElementById('btn-start').addEventListener('click', () => {
+      document.getElementById('main-menu').classList.remove('show');
+      this.state = 'playing';
+      toggleUI(true);
+      this.menuBg = null;
+      if (!this.audio.ctx) this.audio.init();
+      else this.audio.startMusic();
+    });
+
+    document.getElementById('btn-audio').addEventListener('click', () => {
+      document.getElementById('audio-menu').classList.add('show');
+    });
+
+    document.getElementById('btn-resume').addEventListener('click', () => {
+      document.getElementById('pause-menu').classList.remove('show');
+      this.state = 'playing';
+    });
+
+    document.getElementById('btn-restart').addEventListener('click', () => {
+      window.location.reload();
+    });
+
+    document.getElementById('btn-pause-audio').addEventListener('click', () => {
+      document.getElementById('audio-menu').classList.add('show');
+    });
   }
 
   findSafeSpawn() {
@@ -125,6 +177,48 @@ class Game {
   }
 
   update(dt) {
+    if (this.state === 'menu') {
+      if (this.menuBg) this.menuBg.update(dt);
+      if (this.input.wasPressed('Escape') && this.hud.isAudioMenuOpen()) {
+        this.hud.toggleAudioMenu(false);
+      }
+      this.input.endFrame();
+      return;
+    }
+
+    if (this.state === 'paused') {
+      if (this.input.wasPressed('Escape')) {
+        if (this.hud.isAudioMenuOpen()) {
+          this.hud.toggleAudioMenu(false);
+        } else {
+          document.getElementById('pause-menu').classList.remove('show');
+          this.state = 'playing';
+        }
+      }
+      this.input.endFrame();
+      return;
+    }
+
+    if (this.input.wasPressed('KeyM')) {
+      this.minimap.toggleFull();
+    }
+
+    if (this.input.wasPressed('Escape')) {
+      if (this.minimap.fullMapOpen) {
+        this.minimap.toggleFull();
+      } else {
+        this.state = 'paused';
+        document.getElementById('pause-menu').classList.add('show');
+      }
+      this.input.endFrame();
+      return;
+    }
+
+    if (this.hud.isSkillMenuOpen() || this.hud.isAudioMenuOpen() || this.codex.isOpen() || this.minimap.fullMapOpen) {
+      this.input.endFrame();
+      return;
+    }
+
     this.notifications.update(dt);
 
     if (this.input.wasPressed('KeyU')) {
@@ -136,14 +230,6 @@ class Game {
         this.hud.updateSkillMenu(this.talents, this.abilities);
       }
     }
-    if (this.input.wasPressed('KeyI')) {
-      const open = this.hud.isAudioMenuOpen();
-      this.hud.toggleAudioMenu(!open);
-      if (!open) {
-        this.hud.toggleSkillMenu(false);
-        this.codex.toggle(false);
-      }
-    }
     if (this.input.wasPressed('KeyK')) {
       const open = this.codex.isOpen();
       this.codex.toggle(!open);
@@ -152,21 +238,8 @@ class Game {
         this.hud.toggleAudioMenu(false);
       }
     }
-    if (this.input.wasPressed('KeyM')) {
-      this.minimap.toggleFull();
-    }
-    if (this.input.wasPressed('Escape')) {
-      this.hud.toggleSkillMenu(false);
-      this.hud.toggleAudioMenu(false);
-      this.codex.toggle(false);
-      if (this.minimap.fullMapOpen) this.minimap.toggleFull();
-    }
 
     if (!this.running) { this.input.endFrame(); return; }
-    if (this.hud.isSkillMenuOpen() || this.hud.isAudioMenuOpen() || this.codex.isOpen() || this.minimap.fullMapOpen) {
-      this.input.endFrame();
-      return;
-    }
 
     const mw = this.screenToWorld(this.input.mouseScreenX, this.input.mouseScreenY);
 
@@ -419,7 +492,7 @@ class Game {
     }
   }
 
-  render() {
+  renderGameWorld() {
     const ctx = this.ctx;
     const camX = Math.floor(this.camX);
     const camY = Math.floor(this.camY);
@@ -432,8 +505,8 @@ class Game {
     const list = this.renderList;
     list.length = 0;
 
-    const padX = 120;
-    const padY = 180;
+    const padX = 160;
+    const padY = 220;
     const minX = camX - padX;
     const maxX = camX + W + padX;
     const minY = camY - padY;
@@ -493,12 +566,122 @@ class Game {
     }
   }
 
+  render() {
+    if (this.state === 'menu') {
+      if (this.menuBg) this.menuBg.render(this.ctx, this.width, this.height);
+      return;
+    }
+    this.renderGameWorld();
+  }
+
   loop(time) {
     const dt = Math.min((time - this.lastTime) / 1000, 0.05);
     this.lastTime = time;
     this.update(dt);
     this.render();
     requestAnimationFrame(this.loop);
+  }
+}
+
+class MenuBackground {
+  constructor() {
+    this.canvas = document.getElementById('menu-bg-canvas');
+    this.ctx = this.canvas.getContext('2d');
+    this.ctx.imageSmoothingEnabled = false;
+    
+    this.resize();
+    window.addEventListener('resize', () => this.resize());
+  }
+  
+  resize() {
+    this.canvas.width = window.innerWidth;
+    this.canvas.height = window.innerHeight;
+    this.generateScene();
+  }
+
+  seededRandom(seed) {
+    let x = Math.sin(seed++) * 10000;
+    return x - Math.floor(x);
+  }
+
+  generateScene() {
+    const ctx = this.ctx;
+    const w = this.canvas.width;
+    const h = this.canvas.height;
+    let seed = 98765;
+
+    ctx.fillStyle = '#080c14';
+    ctx.fillRect(0, 0, w, h);
+
+    for (let i = 0; i < 4000; i++) {
+      const x = this.seededRandom(seed++) * w;
+      const y = this.seededRandom(seed++) * h;
+      const r = this.seededRandom(seed++) * 80 + 20;
+      const shade = this.seededRandom(seed++);
+      if (shade < 0.4) ctx.fillStyle = 'rgba(13, 20, 30, 0.7)';
+      else if (shade < 0.8) ctx.fillStyle = 'rgba(8, 12, 20, 0.8)';
+      else ctx.fillStyle = 'rgba(22, 36, 54, 0.4)';
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    const tempWorld = new World();
+    tempWorld.buildTreeSprites();
+
+    const trees = [];
+    const rocks = [];
+
+    for (let i = 0; i < 400; i++) {
+      const x = this.seededRandom(seed++) * w;
+      const y = this.seededRandom(seed++) * h;
+
+      if (this.seededRandom(seed++) < 0.7) {
+        trees.push({
+          x: x,
+          y: y,
+          spriteIdx: Math.floor(this.seededRandom(seed++) * tempWorld.treeSprites.length)
+        });
+      } else {
+        rocks.push({ x, y });
+      }
+    }
+
+    trees.sort((a, b) => a.y - b.y);
+
+    for (const r of rocks) {
+      ctx.fillStyle = '#0a0e14';
+      ctx.beginPath();
+      ctx.moveTo(r.x - 15, r.y + 10);
+      ctx.lineTo(r.x - 5, r.y - 10);
+      ctx.lineTo(r.x + 10, r.y - 5);
+      ctx.lineTo(r.x + 20, r.y + 15);
+      ctx.fill();
+      
+      ctx.fillStyle = '#141e30';
+      ctx.beginPath();
+      ctx.moveTo(r.x - 10, r.y + 5);
+      ctx.lineTo(r.x - 3, r.y - 5);
+      ctx.lineTo(r.x + 8, r.y - 2);
+      ctx.fill();
+    }
+
+    for (const t of trees) {
+      const sprite = tempWorld.treeSprites[t.spriteIdx];
+      ctx.drawImage(sprite, t.x - sprite.width / 2, t.y - sprite.height + 20);
+    }
+
+    const vignette = ctx.createRadialGradient(w/2, h/2, 200, w/2, h/2, w*0.7);
+    vignette.addColorStop(0, 'rgba(0,0,0,0)');
+    vignette.addColorStop(1, 'rgba(0,0,0,0.95)');
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, w, h);
+  }
+
+  update(dt) {}
+
+  render(ctx, w, h) {
+    ctx.drawImage(this.canvas, 0, 0);
   }
 }
 
