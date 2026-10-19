@@ -172,7 +172,6 @@ class Game {
 
     const wasDashing = this.player.dashTimer > 0;
     this.input.consumeClick(dt);
-    const prevAttackTimer = this.player.attackTimer;
     this.player.update(dt, this.input, this.world, mw.x, mw.y, this.audio);
 
     if (!wasDashing && this.player.dashTimer > 0) {
@@ -257,6 +256,7 @@ class Game {
 
     this.hud.update(p.hp, this.stats.maxHp, this.stats.exp, this.stats.expToNext, this.stats.level);
     this.hud.updateDash(p, this.abilities.has('dash'));
+    this.hud.updateBlock(p, true);
 
     if (!p.alive) {
       if (this.talents.effects.phoenix && !p.phoenixUsed) {
@@ -287,11 +287,11 @@ class Game {
     let damage = p.damage;
 
     if (p.chargedAttack) {
-      const chargeBonus = 1.0 + Math.min(1.6, p.chargeTime) * 1.5;
+      const chargeBonus = 1.0 + Math.min(1.6, p.chargedAmount) * 1.5;
       damage = damage * chargeBonus;
     }
     if (p._isSpinAttackActive) {
-      damage = damage * 1.1;
+      damage = damage * 1.6;
     }
 
     if (t.berserk && p.hp / this.stats.maxHp < 0.4) {
@@ -375,7 +375,7 @@ class Game {
       }
     }
 
-    p.chargeTime = 0;
+    p.chargedAmount = 0;
 
     if (hitAny) this.audio.hitEnemy();
   }
