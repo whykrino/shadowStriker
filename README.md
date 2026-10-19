@@ -1,92 +1,92 @@
 # Shadow Striker
 
-2D-слэшер про ниндзя на чистом JS и Canvas. Без движков, сборщиков и зависимостей.
+A 2D ninja slasher built with pure JS and Canvas. No engines, bundlers, or dependencies.
 
 ---
 
-## Что это и зачем
+## What is this and why
 
-Небольшая браузерная игра в жанре top-down slasher.
+A small browser game in the top-down slasher genre.
 
-Делаю как личный проект, чтобы прокачать процедурную графику и звук на голом Canvas без движков. Хочу собрать законченный, отполированный маленький слэшер, который запускается где угодно без установки.
-
----
-
-## Что внутри
-
-- Топ-даун бой: сектор атаки, backstab, заряженный удар, вихрь
-- Блок с зарядами и рывок с восстановлением
-- Таланты, способности по уровням, прокачка
-- 12 архетипов мобов и боссы каждые 10 уровней
-- Процедурный мир с зонами, руинами, деревьями и камнями
-- Мини-карта, кодекс, уведомления, меню талантов и звука
-- Музыка и звуки генерируются через Web Audio прямо в браузере
+I'm building this as a personal project to level up my procedural graphics and sound skills using raw Canvas without any game engines. The goal is to create a complete, polished little slasher that runs anywhere without installation.
 
 ---
 
-## Стек
+## What's inside
 
-- Чистый JavaScript, без TypeScript и модулей
-- Canvas 2D для графики
-- Web Audio API и OfflineAudioContext для звука
-- Скрипты подключаются через обычный `<script src>` в `index.html`
-- Классы глобальные, живут в `window`
-- Работает через `file://` без сервера
+- Top-down combat: attack arc, backstab, charged attack, whirlwind
+- Block with charges and a dashing mechanic with recovery
+- Talents, level-based abilities, and progression
+- 12 monster archetypes and bosses every 10 levels
+- Procedural world with zones, ruins, trees, and rocks
+- Minimap, codex, notifications, talent and audio menus
+- Music and sounds are generated via Web Audio directly in the browser
 
 ---
 
-## Структура проекта
+## Tech stack
+
+- Pure JavaScript, no TypeScript or modules
+- Canvas 2D for graphics
+- Web Audio API and OfflineAudioContext for sound
+- Scripts are connected via standard `<script src>` in `index.html`
+- Classes are global, living in `window`
+- Runs via `file://` without a server
+
+---
+
+## Project structure
 
 ~~~text
 shooter/
 ├── index.html
 ├── css/
-│   ├── main.css - HUD, подсказки, уведомления, виньетка, gameover
-│   └── menus.css - таланты, звук, кодекс, детали моба
+│   ├── main.css - HUD, hints, notifications, vignette, gameover
+│   └── menus.css - talents, sound, codex, monster details
 ├── docs/ROADMAP.md
 └── src/
     ├── core/
     │   ├── utils.js - clamp, lerp, angleLerp, rand, randInt, hash, dist2
-    │   ├── input.js - клавиатура, мышь, буфер клика, consumeDash, consumeRightClick
-    │   ├── particles.js - пул частиц (240), burst()
-    │   ├── audio.js - Web Audio, сэмплы через OfflineAudioContext, музыка, звуки блока
+    │   ├── input.js - keyboard, mouse, click buffer, consumeDash, consumeRightClick
+    │   ├── particles.js - particle pool (240), burst()
+    │   ├── audio.js - Web Audio, samples via OfflineAudioContext, music, block sounds
     │   └── pools.js - ObjectPool, BulletPool, DamageNumberPool, LootPool
     ├── systems/
-    │   ├── notifications.js - всплывашки правый верхний угол
-    │   ├── abilities.js - способности по уровням
-    │   ├── player_stats.js - level (стартует с 0), exp, str/agi/int/vit
-    │   ├── talents.js - дерево талантов, 20 узлов, 4 ветки
-    │   ├── skeleton.js - Bone + Skeleton (не используется, можно удалить)
-    │   ├── codex.js - данные для кодекса
-    │   └── dev_instruments.js - чит-меню (класс CheatMenu)
+    │   ├── notifications.js - top-right popups
+    │   ├── abilities.js - level-based abilities
+    │   ├── player_stats.js - level (starts at 0), exp, str/agi/int/vit
+    │   ├── talents.js - talent tree, 20 nodes, 4 branches
+    │   ├── skeleton.js - Bone + Skeleton (unused, can be deleted)
+    │   ├── codex.js - codex data
+    │   └── dev_instruments.js - cheat menu (CheatMenu class)
     ├── world/
-    │   ├── world.js - карта 84x36 тайлов, текстура, коллизии, зоны с сегментным свечением
-    │   ├── zones.js - 3 зоны: 1 safe, 1 mid, 1 hard
-    │   └── minimap.js - мини-карта с точками, зонами и вращением
+    │   ├── world.js - 84x36 tile map, texture, collisions, zones with segmented glow
+    │   ├── zones.js - 3 zones: 1 safe, 1 mid, 1 hard
+    │   └── minimap.js - minimap with dots, zones, and rotation
     ├── entities/
-    │   ├── monster_archetypes.js - 12 архетипов мобов
-    │   ├── monster.js - логика мобов
-    │   └── player.js - игрок, анимации, блок, заряд, вихрь
+    │   ├── monster_archetypes.js - 12 monster archetypes
+    │   ├── monster.js - monster logic
+    │   └── player.js - player, animations, block, charge, whirlwind
     ├── ui/
-    │   ├── hud.js - HP/EXP бары, dash-индикатор, меню талантов, меню звука
-    │   └── codex_ui.js - UI кодекса
-    └── main.js - класс Game, цикл, камера, коллизии, урон
+    │   ├── hud.js - HP/EXP bars, dash indicator, talent menu, sound menu
+    │   └── codex_ui.js - codex UI
+    └── main.js - Game class, loop, camera, collisions, damage
 ~~~
 
 ---
 
-## Как запустить
+## How to run
 
 ### GitHub Pages
 
-Ссылка в репозитории, в разделе `about`.
+The link is in the repository, in the `about` section.
 
-### Локально
+### Locally
 
-Скачай source code, запусти `index.html`.
+Download the source code, open `index.html`.
 
 ---
 
-## Статус
+## Status
 
-Играбельный прототип. Ядро геймплея, прогрессия, мобы, мир, звук и UI на месте. Продолжаю баланс и наполнение контентом.
+Playable prototype. Core gameplay, progression, monsters, world, sound, and UI are in place. Continuing with balance and content.
