@@ -31,13 +31,6 @@ class HUD {
     this.valSfx = document.getElementById('val-sfx');
     this.muteBtn = document.getElementById('mute-btn');
 
-    this.blockIndicator = document.getElementById('block-indicator');
-    this.blockCanvas = document.getElementById('block-canvas');
-    this.blockCtx = this.blockCanvas.getContext('2d');
-    this.blockCount = document.getElementById('block-count');
-    this._lastBlockHits = -1;
-    this._lastBlockRing = '';
-    this._blockVisible = false;
     this.dashIndicator = document.getElementById('dash-indicator');
     this.dashCanvas = document.getElementById('dash-canvas');
     this.dashCtx = this.dashCanvas.getContext('2d');
@@ -48,6 +41,14 @@ class HUD {
     this.ctrlChargeSep = document.getElementById('ctrl-charge-sep');
     this.ctrlSpin = document.getElementById('ctrl-spin');
     this.ctrlSpinSep = document.getElementById('ctrl-spin-sep');
+
+    this.blockIndicator = document.getElementById('block-indicator');
+    this.blockCanvas = document.getElementById('block-canvas');
+    this.blockCtx = this.blockCanvas.getContext('2d');
+    this.blockCount = document.getElementById('block-count');
+    this._lastBlockHits = -1;
+    this._lastBlockRing = '';
+    this._blockVisible = false;
 
     this._lastCharges = -1;
     this._lastMaxCharges = -1;
@@ -108,6 +109,11 @@ class HUD {
       this.muteBtn.classList.toggle('muted', nowMuted);
       this.muteBtn.textContent = nowMuted ? 'ВКЛЮЧИТЬ ЗВУК' : 'ВЫКЛЮЧИТЬ ЗВУК';
     });
+    this.audioMenu.addEventListener('click', (e) => {
+      if (e.target === this.audioMenu) {
+        this.toggleAudioMenu(false);
+      }
+    });
   }
 
   switchTab(name) {
@@ -153,7 +159,7 @@ class HUD {
     }
   }
 
-    updateDash(player, hasDashAbility) {
+  updateDash(player, hasDashAbility) {
     if (hasDashAbility !== this._dashEnabled) {
       this._dashEnabled = hasDashAbility;
       this.ctrlDash.classList.toggle('show', hasDashAbility);
@@ -229,7 +235,7 @@ class HUD {
       ctx.stroke();
     }
   }
-  
+
   updateBlock(player, hasBlock) {
     if (!this.blockIndicator) return;
     if (!hasBlock) {
@@ -300,7 +306,7 @@ class HUD {
       ctx.stroke();
     }
   }
-
+  
   updateSkillMenu(talents, abilities) {
     this.skillPointsEl.textContent = talents.points;
     this.renderTalentTree(talents);
