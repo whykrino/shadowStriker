@@ -29,14 +29,15 @@
 - Чистый JavaScript, без TypeScript и модулей
 - Canvas 2D для графики
 - Web Audio API и OfflineAudioContext для звука
-- Скрипты подключаются через обычный <script src> в index.html
-- Классы глобальные, живут в window
-- Работает через file:// без сервера
+- Скрипты подключаются через обычный `<script src>` в `index.html`
+- Классы глобальные, живут в `window`
+- Работает через `file://` без сервера
 
 ---
 
 ## Структура проекта
 
+~~~text
 shooter/
 ├── index.html
 ├── css/
@@ -70,6 +71,7 @@ shooter/
     │   ├── hud.js - HP/EXP бары, dash-индикатор, меню талантов, меню звука
     │   └── codex_ui.js - UI кодекса
     └── main.js - класс Game, цикл, камера, коллизии, урон
+~~~
 
 ---
 
@@ -77,11 +79,11 @@ shooter/
 
 ### GitHub Pages
 
-Ссылка в репозитории, в разделе about.
+Ссылка в репозитории, в разделе `about`.
 
 ### Локально
 
-Скачай source code, запусти index.html.
+Скачай source code, запусти `index.html`.
 
 ---
 
