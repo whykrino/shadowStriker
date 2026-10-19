@@ -137,10 +137,7 @@
   opacity: 0;
   transition: opacity 0.25s;
 }
-.codex-detail.show {
-  display: flex;
-  opacity: 1;
-}
+.codex-detail.show { display: flex; opacity: 1; }
 .codex-detail-panel {
   width: 660px;
   max-height: 86vh;
@@ -223,14 +220,12 @@
   color: #4a9eff;
   font-variant-numeric: tabular-nums;
 }
-
 .codex-detail-desc {
   font-size: 12px;
   letter-spacing: 1px;
   color: #b8c8dc;
   line-height: 1.7;
 }
-
 .codex-detail-hint {
   font-size: 11px;
   letter-spacing: 1px;
