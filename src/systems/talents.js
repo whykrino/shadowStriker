@@ -110,6 +110,21 @@ const TALENT_TREE = {
     icon: '✦', cost: 5, requires: ['vit3', 'vit4'], stat: 'vit',
     effect: { phoenix: true },
   },
+  vit6: {
+    id: 'vit6', name: 'СТОЙКА', desc: '+2 заряда блока',
+    icon: '⛨', cost: 2, requires: ['vit1'], stat: 'vit',
+    effect: { blockCharges: 2 },
+  },
+  vit7: {
+    id: 'vit7', name: 'ГЛУХАЯ ОБОРОНА', desc: '+4 заряда блока',
+    icon: '⛨', cost: 3, requires: ['vit6'], stat: 'vit',
+    effect: { blockCharges: 4 },
+  },
+  vit8: {
+    id: 'vit8', name: 'НЕСОКРУШИМОСТЬ', desc: '+6 зарядов блока',
+    icon: '⛨', cost: 4, requires: ['vit7'], stat: 'vit',
+    effect: { blockCharges: 6 },
+  },
 };
 
 class TalentSystem {
@@ -145,6 +160,7 @@ class TalentSystem {
     const e = {
       damageMult: 0, speedMult: 0, rangeMult: 0, expMult: 0,
       maxHp: 0, regen: 0, dashCharges: 0, dashCooldownMult: 0,
+      blockCharges: 0,
       lifesteal: 0, damageResist: 0, healOnKill: 0,
       cleave: false, berserk: false, execute: 0,
       phaseDash: false, doubleStrike: 0, phantomDash: false,
