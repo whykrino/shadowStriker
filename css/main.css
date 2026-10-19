@@ -70,7 +70,7 @@ html, body {
 
 #dash-indicator {
   position: fixed;
-  right: 20px;
+  right: 80px;
   bottom: 220px;
   width: 60px; height: 60px;
   pointer-events: none;
@@ -98,6 +98,38 @@ html, body {
 }
 #dash-label .dash-icon {
   font-size: 14px;
+  color: #8fc9ff;
+}
+#block-indicator {
+  position: fixed;
+  right: 20px;
+  bottom: 220px;
+  width: 60px; height: 60px;
+  pointer-events: none;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#block-indicator.hidden { display: none; }
+#block-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%; height: 100%;
+}
+#block-label {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #e8eef5;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+#block-label .block-icon {
+  font-size: 13px;
   color: #8fc9ff;
 }
 

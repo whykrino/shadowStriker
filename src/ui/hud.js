@@ -31,6 +31,13 @@ class HUD {
     this.valSfx = document.getElementById('val-sfx');
     this.muteBtn = document.getElementById('mute-btn');
 
+    this.blockIndicator = document.getElementById('block-indicator');
+    this.blockCanvas = document.getElementById('block-canvas');
+    this.blockCtx = this.blockCanvas.getContext('2d');
+    this.blockCount = document.getElementById('block-count');
+    this._lastBlockHits = -1;
+    this._lastBlockRing = '';
+    this._blockVisible = false;
     this.dashIndicator = document.getElementById('dash-indicator');
     this.dashCanvas = document.getElementById('dash-canvas');
     this.dashCtx = this.dashCanvas.getContext('2d');
@@ -223,6 +230,77 @@ class HUD {
     }
   }
   
+  updateBlock(player, hasBlock) {
+    if (!this.blockIndicator) return;
+    if (!hasBlock) {
+      if (this._blockVisible) {
+        this.blockIndicator.classList.add('hidden');
+        this._blockVisible = false;
+      }
+      return;
+    }
+    if (!this._blockVisible) {
+      this.blockIndicator.classList.remove('hidden');
+      this._blockVisible = true;
+      this._lastBlockHits = -1;
+      this._lastBlockRing = '';
+    }
+
+    const maxCharges = player.blockMaxHits;
+    const charges = player.blockHitsLeft;
+
+    if (charges !== this._lastBlockHits) {
+      this.blockCount.textContent = charges;
+      this._lastBlockHits = charges;
+    }
+
+    let pct = 1;
+    if (charges < maxCharges) {
+      const remaining = Math.max(0, player.blockRechargeTimer);
+      pct = Math.max(0, Math.min(1, 1 - remaining / player.blockRechargeTime));
+    }
+
+    const filled = charges >= maxCharges;
+    const ringState = filled + ':' + pct.toFixed(2);
+    if (ringState === this._lastBlockRing) return;
+    this._lastBlockRing = ringState;
+
+    const ctx = this.blockCtx;
+    const W = this.blockCanvas.width;
+    const H = this.blockCanvas.height;
+    const cx = W / 2;
+    const cy = H / 2;
+    const radius = W / 2 - 6;
+
+    ctx.clearRect(0, 0, W, H);
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(10, 18, 32, 0.7)';
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(74, 158, 255, 0.2)';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    if (filled) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(74, 158, 255, 0.75)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, -Math.PI / 2, -Math.PI / 2 + pct * Math.PI * 2);
+      ctx.strokeStyle = 'rgba(74, 158, 255, 0.75)';
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+    }
+  }
+
   updateSkillMenu(talents, abilities) {
     this.skillPointsEl.textContent = talents.points;
     this.renderTalentTree(talents);
@@ -256,6 +334,9 @@ class HUD {
       vit3: { col: 0, row: 3 },
       vit4: { col: 0, row: 1 },
       vit5: { col: 0, row: 0 },
+      vit6: { col: 1, row: 3 },
+      vit7: { col: 1, row: 4 },
+      vit8: { col: 1, row: 5 },
     };
 
     const cellW = 110;
