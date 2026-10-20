@@ -199,6 +199,12 @@ class Game {
       return;
     }
 
+    if (this.input.wasPressed('Escape') && this.hud.isAudioMenuOpen()) {
+      this.hud.toggleAudioMenu(false);
+      this.input.endFrame();
+      return;
+    }
+
     if (this.input.wasPressed('KeyM')) {
       this.minimap.toggleFull();
     }
@@ -206,9 +212,35 @@ class Game {
     if (this.input.wasPressed('Escape')) {
       if (this.minimap.fullMapOpen) {
         this.minimap.toggleFull();
+      } else if (this.codex.isOpen()) {
+        this.codex.toggle(false);
+      } else if (this.hud.isSkillMenuOpen()) {
+        this.hud.toggleSkillMenu(false);
       } else {
         this.state = 'paused';
         document.getElementById('pause-menu').classList.add('show');
+      }
+      this.input.endFrame();
+      return;
+    }
+
+    if (this.input.wasPressed('KeyU')) {
+      const open = this.hud.isSkillMenuOpen();
+      this.hud.toggleSkillMenu(!open);
+      if (!open) {
+        this.hud.toggleAudioMenu(false);
+        this.codex.toggle(false);
+        this.hud.updateSkillMenu(this.talents, this.abilities);
+      }
+      this.input.endFrame();
+      return;
+    }
+    if (this.input.wasPressed('KeyK')) {
+      const open = this.codex.isOpen();
+      this.codex.toggle(!open);
+      if (!open) {
+        this.hud.toggleSkillMenu(false);
+        this.hud.toggleAudioMenu(false);
       }
       this.input.endFrame();
       return;
@@ -220,24 +252,6 @@ class Game {
     }
 
     this.notifications.update(dt);
-
-    if (this.input.wasPressed('KeyU')) {
-      const open = this.hud.isSkillMenuOpen();
-      this.hud.toggleSkillMenu(!open);
-      if (!open) {
-        this.hud.toggleAudioMenu(false);
-        this.codex.toggle(false);
-        this.hud.updateSkillMenu(this.talents, this.abilities);
-      }
-    }
-    if (this.input.wasPressed('KeyK')) {
-      const open = this.codex.isOpen();
-      this.codex.toggle(!open);
-      if (!open) {
-        this.hud.toggleSkillMenu(false);
-        this.hud.toggleAudioMenu(false);
-      }
-    }
 
     if (!this.running) { this.input.endFrame(); return; }
 
