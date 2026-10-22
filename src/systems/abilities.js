@@ -4,15 +4,22 @@ const ABILITIES = {
   dash: {
     id: 'dash',
     name: 'РЫВОК',
-    desc: 'SHIFT - стремительный рывок',
+    desc: 'Стремительный рывок, 3 заряда',
     icon: '»',
     unlockLevel: 2,
   },
-  spin: {
-    id: 'spin',
-    name: 'ВИХРЬ',
-    desc: 'ПКМ - круговой удар',
-    icon: '◎',
+  charge: {
+    id: 'charge',
+    name: 'ЗАРЯЖЕННЫЙ УДАР',
+    desc: 'Мощная атака, урон растёт со временем удержания',
+    icon: '⚡',
+    unlockLevel: 3,
+  },
+  airAttack: {
+    id: 'airAttack',
+    name: 'УДАР В ПАДЕНИИ',
+    desc: 'Рубящий удар вниз с ударной волной',
+    icon: '▼',
     unlockLevel: 4,
   },
   heal: {
