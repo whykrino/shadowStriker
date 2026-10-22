@@ -104,6 +104,7 @@ class AudioSystem {
     this.samples.enemyHurt = await this._renderEnemyHurt();
     this.samples.playerHurt = await this._renderPlayerHurt();
     this.samples.dash = await this._renderDash();
+    this.samples.jump = await this._renderJump();
     this.samples.kill = await this._renderKill();
     this.samples.levelUp = await this._renderLevelUp();
     this.samples.pickup = await this._renderPickup();
@@ -302,6 +303,35 @@ class AudioSystem {
       wg.connect(ctx.destination);
       whoosh.start(0);
       whoosh.stop(0.36);
+    });
+  }
+
+  _renderJump() {
+    return this._render(0.22, (ctx) => {
+      const noise = ctx.createBufferSource();
+      const buf = ctx.createBuffer(1, ctx.sampleRate * 0.22, ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) {
+        const t = i / d.length;
+        d[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, 2);
+      }
+      noise.buffer = buf;
+
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.setValueAtTime(900, 0);
+      bp.frequency.exponentialRampToValueAtTime(2400, 0.18);
+      bp.Q.value = 1.5;
+
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, 0);
+      gain.gain.exponentialRampToValueAtTime(0.18, 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.0001, 0.22);
+
+      noise.connect(bp);
+      bp.connect(gain);
+      gain.connect(ctx.destination);
+      noise.start(0);
     });
   }
 
@@ -531,6 +561,7 @@ class AudioSystem {
   enemyHurt()  { this._playSample(this.samples.enemyHurt, 0.4); }
   playerHurt() { this._playSample(this.samples.playerHurt, 0.72); }
   dash()       { this._playSample(this.samples.dash, 0.5); }
+  jump()       { this._playSample(this.samples.jump, 0.42); }
   killEnemy()  { this._playSample(this.samples.kill, 0.5); }
   levelUp()    { this._playSample(this.samples.levelUp, 0.58); }
   pickup()     { this._playSample(this.samples.pickup, 0.42); }
