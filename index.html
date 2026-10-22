@@ -7,8 +7,30 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='10' fill='%230a1226' fill-opacity='0.85'/><circle cx='30' cy='20' r='14' fill='%23060a12'/><circle cx='30' cy='20' r='12' fill='%230e1524'/><rect x='19' y='18' width='22' height='3.5' fill='%234a9eff'/><rect x='19' y='19' width='22' height='1' fill='%238fc9ff'/><path d='M24 35 L36 35 L41 58 L19 58 Z' fill='%231a2438'/><path d='M26 38 L34 38 L37 54 L23 54 Z' fill='%2311192a'/><rect x='25' y='42' width='10' height='2' fill='%234a9eff'/><path d='M19 44 L6 26 L4 28 L17 47 Z' fill='%23c8d6e5'/><path d='M17 47 L7 55 L5.5 53.5 L15 45 Z' fill='%233a2412'/><circle cx='39' cy='44' r='3.2' fill='%230a0e18'/><circle cx='39' cy='44' r='1.4' fill='%234a9eff'/></svg>" />
 <link rel="stylesheet" href="css/main.css">
 <link rel="stylesheet" href="css/menus.css">
+<link rel="stylesheet" href="css/loading.css">
 </head>
 <body>
+
+<div id="loading-screen">
+  <svg class="loading-logo" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+    <rect width="64" height="64" rx="10" fill="#0a1226" fill-opacity="0.85"/>
+    <circle cx="30" cy="20" r="14" fill="#060a12"/>
+    <circle cx="30" cy="20" r="12" fill="#0e1524"/>
+    <rect x="19" y="18" width="22" height="3.5" fill="#4a9eff"/>
+    <rect x="19" y="19" width="22" height="1" fill="#8fc9ff"/>
+    <path d="M24 35 L36 35 L41 58 L19 58 Z" fill="#1a2438"/>
+    <path d="M26 38 L34 38 L37 54 L23 54 Z" fill="#11192a"/>
+    <rect x="25" y="42" width="10" height="2" fill="#4a9eff"/>
+    <path d="M19 44 L6 26 L4 28 L17 47 Z" fill="#c8d6e5"/>
+    <path d="M17 47 L7 55 L5.5 53.5 L15 45 Z" fill="#3a2412"/>
+    <circle cx="39" cy="44" r="3.2" fill="#0a0e18"/>
+    <circle cx="39" cy="44" r="1.4" fill="#4a9eff"/>
+  </svg>
+  <div class="loading-title">SHADOW STRIKER</div>
+  <div class="loading-bar-wrap"><div class="loading-bar-fill" id="loading-bar-fill"></div></div>
+  <div class="loading-hint" id="loading-hint">ЗАГРУЗКА</div>
+</div>
+
 <canvas id="game"></canvas>
 <div id="vignette-css"></div>
 
@@ -43,28 +65,13 @@
 
 <div id="controls">
   <div class="ctrl-row">
-    <span><b>WASD</b> движение</span>
-    <span class="ctrl-sep"></span>
-    <span><b>МЫШЬ</b> прицел</span>
-    <span class="ctrl-sep"></span>
-    <span><b>ЛКМ</b> удар</span>
-    <span id="ctrl-dash-sep" class="ctrl-sep"></span>
-    <span id="ctrl-dash"><b>SHIFT</b> рывок</span>
-    <span id="ctrl-charge-sep" class="ctrl-sep"></span>
-    <span id="ctrl-charge"><b>ПРОБЕЛ</b> заряд</span>
-    <span class="ctrl-sep"></span>
-    <span><b>ПКМ</b> блок</span>
-    <span id="ctrl-spin-sep" class="ctrl-sep"></span>
-    <span id="ctrl-spin"><b>T</b> вихрь</span>
-  </div>
-  <div class="ctrl-row">
     <span><b>U</b> таланты</span>
     <span class="ctrl-sep"></span>
     <span><b>K</b> кодекс</span>
     <span class="ctrl-sep"></span>
     <span><b>M</b> карта</span>
     <span class="ctrl-sep"></span>
-    <span><b>ESC</b> пауза</span>
+    <span><b>H</b> помощь</span>
   </div>
 </div>
 
@@ -171,6 +178,17 @@
   </div>
 </div>
 
+<div class="menu-overlay" id="help-menu">
+  <div class="menu-panel">
+    <div class="menu-header">
+      <h2>ПОМОЩЬ</h2>
+      <div class="skill-points">УПРАВЛЕНИЕ</div>
+    </div>
+    <div class="help-list" id="help-list"></div>
+    <div class="menu-footer">H ОТКРЫТЬ/ЗАКРЫТЬ · ESC ЗАКРЫТЬ</div>
+  </div>
+</div>
+
 <div id="gameover">
   <h1>DEAD</h1>
 </div>
@@ -207,6 +225,7 @@
 <script src="src/systems/player_stats.js"></script>
 <script src="src/systems/talents.js"></script>
 <script src="src/systems/skeleton.js"></script>
+<script src="src/systems/help.js"></script>
 <script src="src/systems/codex.js"></script>
 <script src="src/world/world.js"></script>
 <script src="src/world/zones.js"></script>
