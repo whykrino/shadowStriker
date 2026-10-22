@@ -31,16 +31,13 @@ class HUD {
     this.valSfx = document.getElementById('val-sfx');
     this.muteBtn = document.getElementById('mute-btn');
 
+    this.helpMenu = document.getElementById('help-menu');
+    this.helpList = document.getElementById('help-list');
+
     this.dashIndicator = document.getElementById('dash-indicator');
     this.dashCanvas = document.getElementById('dash-canvas');
     this.dashCtx = this.dashCanvas.getContext('2d');
     this.dashCount = document.getElementById('dash-count');
-    this.ctrlDash = document.getElementById('ctrl-dash');
-    this.ctrlCharge = document.getElementById('ctrl-charge');
-    this.ctrlDashSep = document.getElementById('ctrl-dash-sep');
-    this.ctrlChargeSep = document.getElementById('ctrl-charge-sep');
-    this.ctrlSpin = document.getElementById('ctrl-spin');
-    this.ctrlSpinSep = document.getElementById('ctrl-spin-sep');
 
     this.blockIndicator = document.getElementById('block-indicator');
     this.blockCanvas = document.getElementById('block-canvas');
@@ -51,12 +48,9 @@ class HUD {
     this._blockVisible = false;
 
     this._lastCharges = -1;
-    this._lastMaxCharges = -1;
     this._lastRingState = '';
     this._dashVisible = false;
-    this._chargeVisible = false;
     this._dashEnabled = false;
-    this._chargeEnabled = false;
 
     this.onTalentClick = null;
 
@@ -65,6 +59,7 @@ class HUD {
     }
 
     this._initAudioMenu();
+    this._renderHelp();
 
     this.dashIndicator.classList.add('hidden');
     this._dashVisible = false;
@@ -116,6 +111,19 @@ class HUD {
     });
   }
 
+  _renderHelp() {
+    if (!this.helpList || typeof HELP_DATA === 'undefined') return;
+    let html = '';
+    for (const h of HELP_DATA) {
+      html +=
+        '<div class="help-row">' +
+          '<div class="help-key">' + h.key + '</div>' +
+          '<div class="help-desc">' + h.desc + '</div>' +
+        '</div>';
+    }
+    this.helpList.innerHTML = html;
+  }
+
   switchTab(name) {
     for (const t of this.tabs) {
       t.classList.toggle('active', t.dataset.tab === name);
@@ -144,26 +152,12 @@ class HUD {
     if (level !== this._level) {
       this.levelVal.textContent = level;
       this._level = level;
-
-      const canCharge = level >= 3;
-      if (canCharge !== this._chargeEnabled) {
-        this._chargeEnabled = canCharge;
-        this.ctrlCharge.classList.toggle('show', canCharge);
-        this.ctrlChargeSep.classList.toggle('show', canCharge);
-      }
-      const canSpin = level >= 4;
-      if (this.ctrlSpin) {
-        this.ctrlSpin.classList.toggle('show', canSpin);
-        this.ctrlSpinSep.classList.toggle('show', canSpin);
-      }      
     }
   }
 
   updateDash(player, hasDashAbility) {
     if (hasDashAbility !== this._dashEnabled) {
       this._dashEnabled = hasDashAbility;
-      this.ctrlDash.classList.toggle('show', hasDashAbility);
-      this.ctrlDashSep.classList.toggle('show', hasDashAbility);
     }
 
     if (!hasDashAbility) {
@@ -306,7 +300,7 @@ class HUD {
       ctx.stroke();
     }
   }
-  
+
   updateSkillMenu(talents, abilities) {
     this.skillPointsEl.textContent = talents.points;
     this.renderTalentTree(talents);
@@ -476,6 +470,13 @@ class HUD {
   }
   isAudioMenuOpen() {
     return this.audioMenu.classList.contains('show');
+  }
+  toggleHelpMenu(show) {
+    if (show) this.helpMenu.classList.add('show');
+    else this.helpMenu.classList.remove('show');
+  }
+  isHelpMenuOpen() {
+    return this.helpMenu.classList.contains('show');
   }
   showGameOver() {
     this.gameover.classList.add('show');
