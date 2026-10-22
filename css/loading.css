@@ -1,0 +1,78 @@
+#loading-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  background: radial-gradient(circle at center, #0a1226 0%, #05070d 70%);
+  opacity: 1;
+  transition: opacity 0.8s ease;
+}
+#loading-screen.hide {
+  opacity: 0;
+  pointer-events: none;
+}
+#loading-screen.hidden {
+  display: none;
+}
+.loading-logo {
+  width: 140px;
+  height: 140px;
+  filter: drop-shadow(0 0 24px rgba(74, 158, 255, 0.55));
+  animation: loadingPulse 2.2s ease-in-out infinite;
+}
+@keyframes loadingPulse {
+  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 18px rgba(74, 158, 255, 0.4)); }
+  50% { transform: scale(1.05); filter: drop-shadow(0 0 32px rgba(74, 158, 255, 0.8)); }
+}
+.loading-title {
+  font-size: 22px;
+  letter-spacing: 12px;
+  color: #e8eef5;
+  text-shadow: 0 0 14px rgba(74, 158, 255, 0.6);
+  font-weight: 600;
+  animation: loadingFade 2.2s ease-in-out infinite;
+}
+@keyframes loadingFade {
+  0%, 100% { opacity: 0.75; }
+  50% { opacity: 1; }
+}
+.loading-bar-wrap {
+  width: 260px;
+  height: 4px;
+  background: rgba(74, 158, 255, 0.15);
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.loading-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #2a6ec4, #8fc9ff);
+  box-shadow: 0 0 10px rgba(143, 201, 255, 0.8);
+  transition: width 0.15s linear;
+}
+.loading-hint {
+  font-size: 10px;
+  letter-spacing: 4px;
+  color: rgba(143, 174, 203, 0.5);
+}
+#loading-screen.boot .loading-logo {
+  animation: bootSpin 2.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@keyframes bootSpin {
+  0% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(180deg) scale(1.08); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+#loading-screen.enter .loading-bar-fill {
+  background: linear-gradient(90deg, #7a2cd0, #c890ff);
+  box-shadow: 0 0 12px rgba(200, 144, 255, 0.9);
+}
+#loading-screen.enter .loading-title {
+  color: #e0ccff;
+  text-shadow: 0 0 14px rgba(176, 112, 255, 0.6);
+}
