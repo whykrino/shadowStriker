@@ -5,6 +5,65 @@ const CONFIG = {
   camOffsetY: 60,
 };
 
+class LoadingScreen {
+  constructor() {
+    this.el = document.getElementById('loading-screen');
+    this.bar = document.getElementById('loading-bar-fill');
+    this.hint = document.getElementById('loading-hint');
+    this.active = false;
+    this._raf = 0;
+    this._resolve = null;
+    this._hideTimer = 0;
+  }
+
+  show(text, duration, variant) {
+    return new Promise((resolve) => {
+      if (!this.el) { resolve(); return; }
+      if (this._raf) cancelAnimationFrame(this._raf);
+      if (this._hideTimer) { clearTimeout(this._hideTimer); this._hideTimer = 0; }
+      if (this._resolve) { const r = this._resolve; this._resolve = null; r(); }
+
+      this._resolve = resolve;
+      this.active = true;
+      this.el.classList.remove('hide', 'hidden');
+      this.el.classList.toggle('boot', variant === 'boot');
+      this.el.classList.toggle('enter', variant === 'enter');
+
+      this.bar.style.width = '0%';
+      if (text && this.hint) this.hint.textContent = text;
+
+      const start = performance.now();
+      const finish = () => {
+        this.el.classList.add('hide');
+        this._hideTimer = setTimeout(() => {
+          this._hideTimer = 0;
+          this.el.classList.add('hidden');
+          this.el.classList.remove('boot', 'enter');
+          this.active = false;
+          const r = this._resolve;
+          this._resolve = null;
+          if (r) r();
+        }, 800);
+      };
+
+      const tick = (now) => {
+        const t = Math.min(1, (now - start) / duration);
+        let eased;
+        if (variant === 'boot') eased = Math.pow(t, 1.6);
+        else eased = 1 - Math.pow(1 - t, 2.4);
+        this.bar.style.width = (eased * 100).toFixed(1) + '%';
+        if (t < 1) {
+          this._raf = requestAnimationFrame(tick);
+        } else {
+          this._raf = 0;
+          setTimeout(finish, 200);
+        }
+      };
+      this._raf = requestAnimationFrame(tick);
+    });
+  }
+}
+
 class MonsterPool extends ObjectPool {
   constructor() {
     super(
@@ -23,14 +82,16 @@ class Game {
     this.resize();
     window.addEventListener('resize', () => this.resize());
 
+    this.loading = new LoadingScreen();
+
     this.state = 'menu';
     this.menuBg = new MenuBackground();
 
     this.uiWrapper = [
-      document.getElementById('hud'), 
-      document.getElementById('controls'), 
-      document.getElementById('notifications'), 
-      document.getElementById('dash-indicator'), 
+      document.getElementById('hud'),
+      document.getElementById('controls'),
+      document.getElementById('notifications'),
+      document.getElementById('dash-indicator'),
       document.getElementById('block-indicator')
     ];
     document.getElementById('main-menu').classList.add('show');
@@ -72,6 +133,7 @@ class Game {
     this.running = true;
     this.renderList = [];
     this._regenTimer = 0;
+    this.screenShake = 0;
 
     this.hud.onTalentClick = (id) => {
       if (this.talents.learn(id)) {
@@ -99,6 +161,20 @@ class Game {
     if (typeof CheatMenu !== 'undefined') {
       this.cheatMenu = new CheatMenu(this);
     }
+
+    this.loading.show('ПРОБУЖДЕНИЕ', 2800, 'boot').then(() => {
+      if (!this.audio.ctx) this.audio.init();
+      else this.audio.startMusic();
+      if (this.audio.ctx && this.audio.ctx.state === 'suspended') {
+        const resume = () => {
+          if (this.audio.ctx) this.audio.ctx.resume();
+          window.removeEventListener('mousedown', resume);
+          window.removeEventListener('keydown', resume);
+        };
+        window.addEventListener('mousedown', resume);
+        window.addEventListener('keydown', resume);
+      }
+    });
   }
 
   setupMenus() {
@@ -112,11 +188,13 @@ class Game {
 
     document.getElementById('btn-start').addEventListener('click', () => {
       document.getElementById('main-menu').classList.remove('show');
+      this.menuBg = null;
       this.state = 'playing';
       toggleUI(true);
-      this.menuBg = null;
       if (!this.audio.ctx) this.audio.init();
       else this.audio.startMusic();
+      this.lastTime = performance.now();
+      this.loading.show('ВХОД В ТЕНЬ', 2200, 'enter');
     });
 
     document.getElementById('btn-audio').addEventListener('click', () => {
@@ -176,11 +254,20 @@ class Game {
     return { x: sx + this.camX, y: sy + this.camY };
   }
 
+  closeOpenOverlays() {
+    if (this.hud.isHelpMenuOpen()) { this.hud.toggleHelpMenu(false); return true; }
+    if (this.minimap.fullMapOpen) { this.minimap.toggleFull(); return true; }
+    if (this.codex.isOpen()) { this.codex.toggle(false); return true; }
+    if (this.hud.isSkillMenuOpen()) { this.hud.toggleSkillMenu(false); return true; }
+    if (this.hud.isAudioMenuOpen()) { this.hud.toggleAudioMenu(false); return true; }
+    return false;
+  }
+
   update(dt) {
     if (this.state === 'menu') {
       if (this.menuBg) this.menuBg.update(dt);
-      if (this.input.wasPressed('Escape') && this.hud.isAudioMenuOpen()) {
-        this.hud.toggleAudioMenu(false);
+      if (this.input.wasPressed('Escape')) {
+        if (this.hud.isAudioMenuOpen()) this.hud.toggleAudioMenu(false);
       }
       this.input.endFrame();
       return;
@@ -199,8 +286,18 @@ class Game {
       return;
     }
 
-    if (this.input.wasPressed('Escape') && this.hud.isAudioMenuOpen()) {
-      this.hud.toggleAudioMenu(false);
+    if (this.loading.active) {
+      this.input.endFrame();
+      return;
+    }
+
+    if (this.input.wasPressed('Escape')) {
+      if (this.closeOpenOverlays()) {
+        this.input.endFrame();
+        return;
+      }
+      this.state = 'paused';
+      document.getElementById('pause-menu').classList.add('show');
       this.input.endFrame();
       return;
     }
@@ -209,27 +306,13 @@ class Game {
       this.minimap.toggleFull();
     }
 
-    if (this.input.wasPressed('Escape')) {
-      if (this.minimap.fullMapOpen) {
-        this.minimap.toggleFull();
-      } else if (this.codex.isOpen()) {
-        this.codex.toggle(false);
-      } else if (this.hud.isSkillMenuOpen()) {
-        this.hud.toggleSkillMenu(false);
-      } else {
-        this.state = 'paused';
-        document.getElementById('pause-menu').classList.add('show');
-      }
-      this.input.endFrame();
-      return;
-    }
-
     if (this.input.wasPressed('KeyU')) {
       const open = this.hud.isSkillMenuOpen();
       this.hud.toggleSkillMenu(!open);
       if (!open) {
         this.hud.toggleAudioMenu(false);
         this.codex.toggle(false);
+        this.hud.toggleHelpMenu(false);
         this.hud.updateSkillMenu(this.talents, this.abilities);
       }
       this.input.endFrame();
@@ -241,12 +324,25 @@ class Game {
       if (!open) {
         this.hud.toggleSkillMenu(false);
         this.hud.toggleAudioMenu(false);
+        this.hud.toggleHelpMenu(false);
+      }
+      this.input.endFrame();
+      return;
+    }
+    if (this.input.wasPressed('KeyH')) {
+      const open = this.hud.isHelpMenuOpen();
+      this.hud.toggleHelpMenu(!open);
+      if (!open) {
+        this.hud.toggleSkillMenu(false);
+        this.hud.toggleAudioMenu(false);
+        this.codex.toggle(false);
+        this.minimap.fullMapOpen = false;
       }
       this.input.endFrame();
       return;
     }
 
-    if (this.hud.isSkillMenuOpen() || this.hud.isAudioMenuOpen() || this.codex.isOpen() || this.minimap.fullMapOpen) {
+    if (this.hud.isSkillMenuOpen() || this.hud.isAudioMenuOpen() || this.hud.isHelpMenuOpen() || this.codex.isOpen() || this.minimap.fullMapOpen) {
       this.input.endFrame();
       return;
     }
@@ -263,6 +359,11 @@ class Game {
 
     if (!wasDashing && this.player.dashTimer > 0) {
       this.audio.dash();
+    }
+
+    if (this.player.pendingSlam) {
+      this.player.pendingSlam = false;
+      this.performAirSlam();
     }
 
     this.zones.update(dt, this.player, this.damageNumbers);
@@ -303,7 +404,7 @@ class Game {
       if (d2 < m.aggroRange * m.aggroRange) inCombat = true;
 
       const range = m.radius + p.radius;
-      if (d2 < range * range && m.attackCooldown <= 0) {
+      if (d2 < range * range && m.attackCooldown <= 0 && !p.isAirborne) {
         const hpBefore = p.hp;
         p.takeDamage(m.damage, true);
         if (p.hp < hpBefore) this.audio.playerHurt();
@@ -320,7 +421,7 @@ class Game {
       const dx = b.x - p.x;
       const dy = b.y - p.y;
       const r = b.radius + p.radius;
-      if (dx * dx + dy * dy < r * r) {
+      if (dx * dx + dy * dy < r * r && !p.isAirborne) {
         const hpBefore = p.hp;
         p.takeDamage(b.damage, false);
         if (p.hp < hpBefore) this.audio.playerHurt();
@@ -340,6 +441,10 @@ class Game {
 
     this.particles.update(dt);
     this.updateCamera(dt);
+
+    if (this.screenShake > 0) {
+      this.screenShake = Math.max(0, this.screenShake - dt * 3);
+    }
 
     this.hud.update(p.hp, this.stats.maxHp, this.stats.exp, this.stats.expToNext, this.stats.level);
     this.hud.updateDash(p, this.abilities.has('dash'));
@@ -374,25 +479,18 @@ class Game {
     let damage = p.damage;
 
     if (p.chargedAttack) {
-      const chargeBonus = 1.0 + Math.min(1.6, p.chargedAmount) * 1.5;
+      const chargeBonus = 1.0 + Math.min(1.6, p.chargedAmount) * 1.7;
       damage = damage * chargeBonus;
     }
-    if (p._isSpinAttackActive) {
-      damage = damage * 1.6;
-    }
 
-    if (t.berserk && p.hp / this.stats.maxHp < 0.4) {
-      damage = damage * 1.3;
-    }
-    if (p.buffType === 'damage' && p.buffTimer > 0) {
-      damage = damage * 1.5;
-    }
+    if (t.berserk && p.hp / this.stats.maxHp < 0.4) damage = damage * 1.3;
+    if (p.buffType === 'damage' && p.buffTimer > 0) damage = damage * 1.5;
 
     const isDouble = t.doubleStrike > 0 && Math.random() < t.doubleStrike;
     if (isDouble) damage = damage * 0.7;
 
-    const isSpin = p.isSpinAttack() || p.chargedAttack;
-    const arc = isSpin ? Math.PI * 2 : p.attackArc;
+    const isCharged = p.chargedAttack;
+    const arc = isCharged ? Math.PI * 1.7 : p.attackArc;
     const minDot = Math.cos(arc / 2);
 
     this.particles.burst(
@@ -413,10 +511,8 @@ class Game {
       const d = Math.hypot(dx, dy);
       if (d > range + m.radius) continue;
 
-      if (!isSpin) {
-        const dot = (dx * dirX + dy * dirY) / (d || 1);
-        if (dot < minDot) continue;
-      }
+      const dot = (dx * dirX + dy * dirY) / (d || 1);
+      if (dot < minDot) continue;
 
       const mobToPlayerX = p.x - m.x;
       const mobToPlayerY = p.y - m.y;
@@ -467,6 +563,56 @@ class Game {
     if (hitAny) this.audio.hitEnemy();
   }
 
+  performAirSlam() {
+    const p = this.player;
+    const t = this.talents.effects;
+
+    const baseDamage = p.damage;
+    const chargeMax = 1.0 + Math.min(1.6, p.chargeHardCap) * 1.7;
+    let slamDamage = baseDamage * (chargeMax - 0.5);
+
+    if (t.berserk && p.hp / this.stats.maxHp < 0.4) slamDamage *= 1.3;
+    if (p.buffType === 'damage' && p.buffTimer > 0) slamDamage *= 1.5;
+
+    const radius = 110;
+    const cx = p.x;
+    const cy = p.y;
+
+    this.screenShake = 0.8;
+
+    const monsters = this.zones.monsters;
+    let hitAny = false;
+
+    for (let i = 0; i < monsters.length; i++) {
+      const m = monsters[i];
+      if (!m.alive) continue;
+      const dx = m.x - cx;
+      const dy = m.y - cy;
+      const d = Math.hypot(dx, dy);
+      if (d > radius + m.radius) continue;
+
+      const falloff = 1 - (d / radius) * 0.35;
+      const dmg = slamDamage * falloff;
+      const r = m.takeDamage(dmg, false, true);
+      this.damageNumbers.spawn(m.x, m.y, r.actual, '#ffdd44', true);
+      if (r.killed) this.onEnemyKilled(m);
+
+      const nx = dx / (d || 1);
+      const ny = dy / (d || 1);
+      m.x += nx * 55;
+      m.y += ny * 55;
+      hitAny = true;
+
+      if (t.freeze && m.alive) m.freeze(1.5);
+    }
+
+    if (hitAny) {
+      this.audio.hitEnemy();
+      this.audio.blockBreak();
+    }
+    this.particles.burst(cx, cy, 6, '#ffdd44', 6);
+  }
+
   onEnemyKilled(m) {
     this.player.onKill();
     this.audio.killEnemy();
@@ -508,8 +654,10 @@ class Game {
 
   renderGameWorld() {
     const ctx = this.ctx;
-    const camX = Math.floor(this.camX);
-    const camY = Math.floor(this.camY);
+    const shakeX = this.screenShake > 0 ? (Math.random() - 0.5) * this.screenShake * 20 : 0;
+    const shakeY = this.screenShake > 0 ? (Math.random() - 0.5) * this.screenShake * 20 : 0;
+    const camX = Math.floor(this.camX + shakeX);
+    const camY = Math.floor(this.camY + shakeY);
     const W = this.width;
     const H = this.height;
 
@@ -602,11 +750,11 @@ class MenuBackground {
     this.canvas = document.getElementById('menu-bg-canvas');
     this.ctx = this.canvas.getContext('2d');
     this.ctx.imageSmoothingEnabled = false;
-    
+
     this.resize();
     window.addEventListener('resize', () => this.resize());
   }
-  
+
   resize() {
     this.canvas.width = window.innerWidth;
     this.canvas.height = window.innerHeight;
@@ -671,7 +819,7 @@ class MenuBackground {
       ctx.lineTo(r.x + 10, r.y - 5);
       ctx.lineTo(r.x + 20, r.y + 15);
       ctx.fill();
-      
+
       ctx.fillStyle = '#141e30';
       ctx.beginPath();
       ctx.moveTo(r.x - 10, r.y + 5);
