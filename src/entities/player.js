@@ -21,7 +21,6 @@ class Player {
     this.attackArc = Math.PI * 1.35;
     this.attackHitApplied = false;
     this.attackQueued = false;
-    this.spinCounter = 0;
 
     this.chargeTime = 0;
     this.chargeMax = 0.6;
@@ -30,10 +29,8 @@ class Player {
     this.isCharging = false;
     this.chargedAttack = false;
     this.chargedAmount = 0;
-    this._prevSpaceDown = false;
+    this._prevChargeKeyDown = false;
 
-    this._isSpinAttackActive = false;
-    this._spinVisualAngle = 0;
     this._swingSoundPlayed = false;
 
     this.isBlocking = false;
@@ -70,6 +67,16 @@ class Player {
     this.buffType = null;
 
     this.phoenixUsed = false;
+
+    this.z = 0;
+    this.vz = 0;
+    this.isAirborne = false;
+    this.jumpCooldown = 0;
+    this.airSlamPending = false;
+    this.pendingSlam = false;
+    this.slamFx = [];
+    this.landCrouch = 0;
+    this.postSlamLock = 0;
 
     this.recompute();
 
@@ -118,11 +125,11 @@ class Player {
         : (10 + this.stats.level * 2) * 0.5;
 
       this.blockHitsLeft--;
-      this.audio.blockHit();
+      if (this.audio) this.audio.blockHit();
 
       if (this.blockHitsLeft <= 0) {
         this.isBlocking = false;
-        this.audio.blockBreak();
+        if (this.audio) this.audio.blockBreak();
       }
 
       if (amount <= blockCap) {
@@ -132,7 +139,7 @@ class Player {
 
       amount -= blockCap;
       this.isBlocking = false;
-      this.audio.blockBreak();
+      if (this.audio) this.audio.blockBreak();
     }
 
     const t = this.talents.effects;
@@ -171,8 +178,9 @@ class Player {
 
   startAttack(charged, chargeAmount) {
     if (!this.alive || this.attackTimer > 0) return;
+    if (this.postSlamLock > 0) return;
     if (this.attackCooldown > 0) { this.attackQueued = true; return; }
-    
+
     this.attackTimer = this.attackDuration;
     this.attackCooldown = 0.35;
     this.attackHitApplied = false;
@@ -180,32 +188,6 @@ class Player {
     this.chargedAttack = !!charged;
     this.chargedAmount = chargeAmount || 0;
     this._swingSoundPlayed = false;
-    this.spinCounter++;
-  }
-
-  startSpinAttack() {
-    if (!this.alive) return false;
-    if (!this.abilities.has('spin')) return false;
-    if (this.attackTimer > 0) return false;
-    if (this.attackCooldown > 0) return false;
-    
-    this.attackTimer = 0.55;
-    this.attackDuration = 0.55;
-    this.attackCooldown = 0.4;
-    this.attackArc = Math.PI * 2;
-    this.attackHitApplied = false;
-    this.chargedAttack = false;
-    this.chargedAmount = 0;
-    this._swingSoundPlayed = false;
-    this._isSpinAttackActive = true;
-    this._spinVisualAngle = 0;
-    return true;
-  }
-
-  isSpinAttack() {
-    if (this._isSpinAttackActive) return true;
-    const t = this.talents.effects;
-    return t.spinEvery > 0 && this.spinCounter % t.spinEvery === 0;
   }
 
   faceTowards(x, y) {
@@ -226,6 +208,15 @@ class Player {
     this.hitShake = Math.max(0, this.hitShake - dt);
     this.levelUpFlash = Math.max(0, this.levelUpFlash - dt);
     this.damageFlash = Math.max(0, this.damageFlash - dt);
+    this.jumpCooldown = Math.max(0, this.jumpCooldown - dt);
+    if (this.landCrouch > 0) this.landCrouch = Math.max(0, this.landCrouch - dt * 3);
+    if (this.postSlamLock > 0) this.postSlamLock = Math.max(0, this.postSlamLock - dt);
+
+    for (let i = this.slamFx.length - 1; i >= 0; i--) {
+      const fx = this.slamFx[i];
+      fx.t += dt;
+      if (fx.t >= fx.life) this.slamFx.splice(i, 1);
+    }
 
     if (this.attackTimer > 0) {
       const p = 1 - this.attackTimer / this.attackDuration;
@@ -233,18 +224,6 @@ class Player {
         this.audio.swordSwing();
         this._swingSoundPlayed = true;
       }
-    }
-
-    if (this.attackTimer <= 0 && this._isSpinAttackActive) {
-      this._isSpinAttackActive = false;
-      this.attackArc = Math.PI * 1.35;
-      this.attackDuration = 0.35;
-    }
-
-    if (this._isSpinAttackActive && this.attackTimer > 0) {
-      const p = 1 - this.attackTimer / this.attackDuration;
-      const spinPhase = Math.min(1, p / 0.85);
-      this._spinVisualAngle = spinPhase * Math.PI * 2;
     }
 
     if (this.buffTimer > 0) {
@@ -260,15 +239,6 @@ class Player {
       }
     }
 
-    const canCharge = this.stats.level >= 3 || this.abilities.has('charge');
-    const spaceDown = input.isDown('Space');
-    const spaceJustPressed = spaceDown && !this._prevSpaceDown;
-    const spaceJustReleased = !spaceDown && this._prevSpaceDown;
-
-    if (input.isDown('KeyT') && this.abilities.has('spin')) {
-      this.startSpinAttack();
-    }
-
     if (this.blockHitsLeft < this.blockMaxHits) {
       this.blockRechargeTimer -= dt;
       if (this.blockRechargeTimer <= 0) {
@@ -279,22 +249,48 @@ class Player {
       this.blockRechargeTimer = this.blockRechargeTime;
     }
 
+    const spaceDown = input.isDown('Space');
+    const spaceJustPressed = spaceDown && !this._prevSpaceDown;
+
+    if (spaceJustPressed && !this.isAirborne && !this.isBlocking && this.jumpCooldown <= 0) {
+      this.jump();
+    }
+
+    this._prevSpaceDown = spaceDown;
+
+    if (this.isAirborne) {
+      if (input.mouseDown && !this.airSlamPending && this.stats.level >= 4 && this.z > 30) {
+        this.airSlamPending = true;
+        this.vz = -1000;
+        this._swingSoundPlayed = false;
+        this.audio.swordSwing();
+      }
+    }
+
     this.isBlocking = input.mouseRightDown
       && this.blockHitsLeft > 0
-      && this.attackTimer <= 0;
+      && this.attackTimer <= 0
+      && !this.isAirborne
+      && !this.airSlamPending
+      && !this.isCharging;
+
     if (this.isBlocking) {
       this.blockTimer += dt;
     } else {
       this.blockTimer = 0;
     }
 
-    if (canCharge && !this.isBlocking) {
-      if (spaceJustPressed && this.attackTimer <= 0) {
+    const chargeKeyDown = input.isDown('KeyT');
+    const chargeJustPressed = chargeKeyDown && !this._prevChargeKeyDown;
+    const canCharge = this.abilities.has('charge');
+
+    if (canCharge && !this.isAirborne && !this.isBlocking && !this.airSlamPending) {
+      if (chargeJustPressed && this.attackTimer <= 0 && !this.isCharging) {
         this.isCharging = true;
         this.chargeTime = 0;
       }
 
-      if (this.isCharging && spaceDown) {
+      if (this.isCharging && chargeKeyDown) {
         this.chargeTime += dt;
         if (this.chargeTime >= this.chargeHardCap) {
           const cap = this.chargeHardCap;
@@ -304,24 +300,26 @@ class Player {
         }
       }
 
-      if (this.isCharging && spaceJustReleased) {
+      if (this.isCharging && !chargeKeyDown) {
         const amt = this.chargeTime;
         this.isCharging = false;
         this.chargeTime = 0;
         this.startAttack(true, amt);
       }
-    } else if (this.isBlocking && this.isCharging) {
+    } else if (this.isCharging) {
       this.isCharging = false;
       this.chargeTime = 0;
     }
 
-    this._prevSpaceDown = spaceDown;
+    this._prevChargeKeyDown = chargeKeyDown;
 
-    if (input.mouseDown && !this.isBlocking) {
-      this.startAttack(false, 0);
-    } else if (this.attackQueued && this.attackCooldown <= 0 && this.attackTimer <= 0) {
-      this.attackQueued = false;
-      this.startAttack(false, 0);
+    if (!this.isAirborne && !this.isCharging && !this.airSlamPending && this.postSlamLock <= 0) {
+      if (input.mouseDown && !this.isBlocking) {
+        this.startAttack(false, 0);
+      } else if (this.attackQueued && this.attackCooldown <= 0 && this.attackTimer <= 0) {
+        this.attackQueued = false;
+        this.startAttack(false, 0);
+      }
     }
 
     const mv = input.moveVector;
@@ -357,12 +355,14 @@ class Player {
     }
 
     let vx = 0, vy = 0;
-    if (mag > 0 && !this._isSpinAttackActive) {
+    if (mag > 0) {
       const nx = mv.x / mag;
       const ny = mv.y / mag;
       let spd = this.dashTimer > 0 ? this._cachedDash : this._cachedSpeed;
       if (this.isBlocking) spd *= 0.45;
       if (this.buffType === 'speed' && this.buffTimer > 0) spd *= 1.5;
+      if (this.isAirborne) spd *= 0.85;
+      if (this.isCharging) spd *= 0.5;
       vx = nx * spd;
       vy = ny * spd;
     }
@@ -370,14 +370,14 @@ class Player {
     this.x += vx * dt;
     this.y += vy * dt;
 
-    world.collide(this, this.radius);
-
-    if (!this._isSpinAttackActive) {
-      this.faceTowards(mouseWorldX, mouseWorldY);
-      this.facing = Utils.angleLerp(this.facing, this.targetFacing, Math.min(1, dt * 22));
+    if (this.isAirborne) {
+      world.clampPosition(this, this.radius);
     } else {
-      this.facing = this.targetFacing + this._spinVisualAngle;
+      world.collide(this, this.radius);
     }
+
+    this.faceTowards(mouseWorldX, mouseWorldY);
+    this.facing = Utils.angleLerp(this.facing, this.targetFacing, Math.min(1, dt * 22));
 
     if (mag > 0) this.walkPhase += dt * 15 * (this.isBlocking ? 0.6 : 1);
     this.breathePhase += dt * 2.5;
@@ -398,9 +398,40 @@ class Player {
       this.phantoms[i].life -= dt;
       if (this.phantoms[i].life <= 0) this.phantoms.splice(i, 1);
     }
+
+    this.updateAir(dt);
+  }
+
+  jump() {
+    if (this.isAirborne) return;
+    if (this.jumpCooldown > 0) return;
+    this.vz = 540;
+    this.isAirborne = true;
+    this.jumpCooldown = 0.35;
+    if (this.audio) this.audio.jump();
+  }
+
+  updateAir(dt) {
+    if (!this.isAirborne) return;
+    this.vz -= 1500 * dt;
+    this.z += this.vz * dt;
+    if (this.z <= 0) {
+      this.z = 0;
+      this.vz = 0;
+      this.isAirborne = false;
+      this.landCrouch = 0.4;
+      if (this.airSlamPending) {
+        this.airSlamPending = false;
+        this.pendingSlam = true;
+        this.postSlamLock = 0.35;
+        this.slamFx.push({ t: 0, life: 0.55, maxR: 110 });
+      }
+    }
   }
 
   consumeAttackHit() {
+    if (this.isAirborne) return false;
+    if (this.airSlamPending) return false;
     if (this.attackTimer > 0 && !this.attackHitApplied) {
       const p = 1 - this.attackTimer / this.attackDuration;
       if (p > 0.3 && p < 0.7) {
@@ -415,71 +446,98 @@ class Player {
     let handX = 16;
     let handY = 2;
     let swordAngle = -Math.PI * 0.32;
-    let lElbowX = 10;
-    let lElbowY = 2;
-    let rElbowX = 10;
-    let rElbowY = 4;
 
-    if (this.isBlocking) {
+    if (this.airSlamPending) {
+      handX = 14;
+      handY = 0;
+      swordAngle = Math.PI * 0.5;
+    } else if (this.isAirborne) {
+      handX = 18;
+      handY = -4;
+      swordAngle = -Math.PI * 0.15;
+    } else if (this.isBlocking) {
       handX = 10;
       handY = -8;
       swordAngle = -Math.PI * 0.5;
     } else if (this.attackTimer > 0) {
       const p = 1 - this.attackTimer / this.attackDuration;
+      const wEnd = 0.35, sEnd = 0.7;
 
-      if (this._isSpinAttackActive) {
-        if (p < 0.85) {
-          handX = 20;
-          handY = 2;
-          swordAngle = -Math.PI * 0.32;
-        } else {
-          const t = (p - 0.85) / 0.15;
-          const ease = 1 - Math.pow(1 - t, 3);
-          handX = Utils.lerp(20, 10, ease);
-          handY = Utils.lerp(2, -10, ease);
-          swordAngle = Utils.lerp(-Math.PI * 0.32, -Math.PI * 0.5, ease);
-        }
+      let angleOff;
+      if (p < wEnd) {
+        const t = p / wEnd;
+        const e = t * t;
+        angleOff = Utils.lerp(0, -0.7, e);
+      } else if (p < sEnd) {
+        const t = (p - wEnd) / (sEnd - wEnd);
+        const e = 1 - Math.pow(1 - t, 3);
+        angleOff = Utils.lerp(-0.7, 1.6, e);
       } else {
-        const wEnd = 0.35, sEnd = 0.7;
-
-        let angleOff;
-        if (p < wEnd) {
-          const t = p / wEnd;
-          const e = t * t;
-          angleOff = Utils.lerp(0, -0.7, e);
-        } else if (p < sEnd) {
-          const t = (p - wEnd) / (sEnd - wEnd);
-          const e = 1 - Math.pow(1 - t, 3);
-          angleOff = Utils.lerp(-0.7, 1.6, e);
-        } else {
-          const t = (p - sEnd) / (1 - sEnd);
-          const e = t * t * (3 - 2 * t);
-          angleOff = Utils.lerp(1.6, 0, e);
-        }
-
-        handX = 16 + Math.cos(-Math.PI * 0.32 + angleOff * 0.5) * 6;
-        handY = 2 + Math.sin(-Math.PI * 0.32 + angleOff * 0.5) * 6;
-
-        swordAngle = -Math.PI * 0.32 + angleOff;
+        const t = (p - sEnd) / (1 - sEnd);
+        const e = t * t * (3 - 2 * t);
+        angleOff = Utils.lerp(1.6, 0, e);
       }
 
-      lElbowX = (8 + handX) / 2 - 2;
-      lElbowY = (2 + handY) / 2 + 3;
-      rElbowX = (10 + handX) / 2 + 2;
-      rElbowY = (4 + handY) / 2 + 3;
+      handX = 16 + Math.cos(-Math.PI * 0.32 + angleOff * 0.5) * 6;
+      handY = 2 + Math.sin(-Math.PI * 0.32 + angleOff * 0.5) * 6;
+
+      swordAngle = -Math.PI * 0.32 + angleOff;
     }
 
-    return {
-      handX, handY, swordAngle,
-      lElbowX, lElbowY,
-      rElbowX, rElbowY,
-    };
+    return { handX, handY, swordAngle };
   }
 
   render(ctx, camX, camY) {
     if (!this.alive) return;
     const px = this.x - camX;
     const py = this.y - camY;
+
+    for (const fx of this.slamFx) {
+      const prog = fx.t / fx.life;
+      const r = fx.maxR * (1 - Math.pow(1 - prog, 2));
+      const alpha = 1 - prog;
+
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+
+      ctx.strokeStyle = 'rgba(255, 230, 140, ' + (alpha * 0.9) + ')';
+      ctx.lineWidth = 4 * alpha + 1;
+      ctx.beginPath();
+      ctx.ellipse(px, py + 20, r, r * 0.45, 0, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(255, 180, 80, ' + (alpha * 0.55) + ')';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(px, py + 20, r * 0.7, r * 0.32, 0, 0, Math.PI * 2);
+      ctx.stroke();
+
+      const slashH = 210 * (1 - prog);
+      const slashW = 7 * alpha;
+      const grad = ctx.createLinearGradient(px, py - slashH + 20, px, py + 20);
+      grad.addColorStop(0, 'rgba(255, 255, 255, 0)');
+      grad.addColorStop(0.35, 'rgba(255, 255, 255, ' + alpha + ')');
+      grad.addColorStop(1, 'rgba(255, 240, 200, ' + (alpha * 0.6) + ')');
+      ctx.fillStyle = grad;
+      ctx.fillRect(px - slashW / 2, py - slashH + 20, slashW, slashH);
+
+      const sparks = 10;
+      for (let s = 0; s < sparks; s++) {
+        const a = (s / sparks) * Math.PI * 2 + prog * 1.5;
+        const dist = r * 0.88;
+        const sx = px + Math.cos(a) * dist;
+        const sy = py + 20 + Math.sin(a) * dist * 0.45;
+        const len = 14 * alpha;
+        ctx.strokeStyle = 'rgba(255, 220, 120, ' + alpha + ')';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(sx + Math.cos(a) * len, sy + Math.sin(a) * len * 0.45);
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    }
 
     if (this.levelUpFlash > 0) {
       ctx.save();
@@ -488,7 +546,7 @@ class Player {
       ctx.globalAlpha = al * 0.4;
       ctx.fillStyle = '#b070ff';
       ctx.beginPath();
-      ctx.arc(px, py, 70, 0, Math.PI * 2);
+      ctx.arc(px, py - this.z, 70, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     }
@@ -513,7 +571,7 @@ class Player {
       ctx.globalCompositeOperation = 'lighter';
       const a = Math.min(1, this.chargeTime / this.chargeHardCap);
       const r = 30 + a * 25;
-      const col = this.chargeReady ? '255, 220, 80' : '74, 158, 255';
+      const col = '74, 158, 255';
       ctx.globalAlpha = 0.3 * a;
       ctx.fillStyle = 'rgb(' + col + ')';
       ctx.beginPath();
@@ -521,7 +579,7 @@ class Player {
       ctx.fill();
 
       ctx.globalAlpha = 1;
-      ctx.strokeStyle = this.chargeReady ? '#ffdd44' : '#4a9eff';
+      ctx.strokeStyle = '#4a9eff';
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.arc(px, py, 26, -Math.PI / 2, -Math.PI / 2 + a * Math.PI * 2);
@@ -575,51 +633,39 @@ class Player {
       ctx.restore();
     }
 
-    if (this.trailAlpha > 0.01) {
-      let startAngle, endAngle;
+    if (this.trailAlpha > 0.01 && !this.isAirborne && !this.airSlamPending) {
+      const sweep = this.attackArc * this.trailAlpha;
+      const startAngle = this.facing - sweep / 2;
+      const endAngle = this.facing + sweep / 2;
 
-      if (this._isSpinAttackActive) {
-        const p = 1 - this.attackTimer / this.attackDuration;
-        if (p < 0.85) {
-          startAngle = this.targetFacing - 0.5;
-          endAngle = this.facing + 0.5;
-        } else {
-          startAngle = endAngle = this.facing;
-        }
-      } else {
-        const sweep = this.attackArc * this.trailAlpha;
-        startAngle = this.facing - sweep / 2;
-        endAngle = this.facing + sweep / 2;
-      }
+      const range = this._cachedRange * (this.chargedAttack ? 1.4 : 1);
+      const col = this.chargedAttack ? '255, 200, 80' : '74, 158, 255';
 
-      if (endAngle > startAngle) {
-        const range = this._cachedRange * (this.chargedAttack ? 1.4 : 1);
-        const col = this.chargedAttack ? '255, 200, 80' : '74, 158, 255';
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = this.trailAlpha * 0.35;
+      ctx.fillStyle = 'rgb(' + col + ')';
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      ctx.arc(px, py, range, startAngle, endAngle);
+      ctx.closePath();
+      ctx.fill();
 
-        ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
-        ctx.globalAlpha = this.trailAlpha * 0.35;
-        ctx.fillStyle = 'rgb(' + col + ')';
-        ctx.beginPath();
-        ctx.moveTo(px, py);
-        ctx.arc(px, py, range, startAngle, endAngle);
-        ctx.closePath();
-        ctx.fill();
-
-        ctx.globalAlpha = this.trailAlpha * 0.7;
-        ctx.fillStyle = 'rgba(255, 240, 220, 1)';
-        ctx.beginPath();
-        ctx.arc(px, py, range - 4, startAngle, endAngle);
-        ctx.arc(px, py, range - 18, endAngle, startAngle, true);
-        ctx.closePath();
-        ctx.fill();
-        ctx.restore();
-      }
+      ctx.globalAlpha = this.trailAlpha * 0.7;
+      ctx.fillStyle = 'rgba(255, 240, 220, 1)';
+      ctx.beginPath();
+      ctx.arc(px, py, range - 4, startAngle, endAngle);
+      ctx.arc(px, py, range - 18, endAngle, startAngle, true);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
     }
 
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    const shadowScale = Math.max(0.4, 1 - this.z * 0.0018);
+    const shadowAlpha = Math.max(0.12, 0.5 - this.z * 0.0012);
+    ctx.fillStyle = 'rgba(0, 0, 0, ' + shadowAlpha + ')';
     ctx.beginPath();
-    ctx.ellipse(px + 4, py + 24, 22, 8, 0, 0, Math.PI * 2);
+    ctx.ellipse(px + 4, py + 24, 22 * shadowScale, 8 * shadowScale, 0, 0, Math.PI * 2);
     ctx.fill();
 
     let flipSprite = false;
@@ -627,17 +673,9 @@ class Player {
     if (cosF < -0.05) flipSprite = true;
 
     ctx.save();
-    ctx.translate(px + shakeX, py + shakeY);
+    ctx.translate(px + shakeX, py + shakeY - this.z);
     if (flipSprite) ctx.scale(-1, 1);
-    
-    if (this._isSpinAttackActive) {
-      const p = 1 - this.attackTimer / this.attackDuration;
-      const crouch = Math.sin(Math.min(1, p / 0.85) * Math.PI) * 6;
-      this._renderCharacter(ctx, crouch);
-    } else {
-      this._renderCharacter(ctx, 0);
-    }
-
+    this._renderCharacter(ctx, this.landCrouch * 8);
     ctx.restore();
 
     if (this.damageFlash > 0) {
@@ -645,7 +683,7 @@ class Player {
       ctx.globalAlpha = this.damageFlash / 0.4 * 0.5;
       ctx.fillStyle = '#ff3355';
       ctx.beginPath();
-      ctx.arc(px, py, 45, 0, Math.PI * 2);
+      ctx.arc(px, py - this.z, 45, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     }
@@ -654,10 +692,12 @@ class Player {
   _renderCharacter(ctx, crouch) {
     const walkSin = Math.sin(this.walkPhase);
     const walkAmt = Math.abs(walkSin) > 0.05 ? 1 : 0;
-    const bob = Math.sin(this.walkPhase * 2) * 3 * walkAmt;
-    const breathe = Math.sin(this.breathePhase) * 1;
-    
-    const kneeBend = (1 - walkAmt) * (Math.sin(this.breathePhase * 0.8) * 0.5 + 0.5) * 2 + crouch;
+    const bob = Math.sin(this.walkPhase * 2) * 3 * walkAmt * (this.isAirborne ? 0 : 1);
+
+    const airT = this.isAirborne ? Math.min(1, this.z / 90) : 0;
+    const airTuck = airT * 14;
+
+    const kneeBend = (1 - walkAmt) * (Math.sin(this.breathePhase * 0.8) * 0.5 + 0.5) * 2 + crouch + airTuck * 0.4;
     const weightShift = (1 - walkAmt) * Math.sin(this.breathePhase * 0.6) * 2;
 
     const pose = this.getWeaponPose();
@@ -668,7 +708,7 @@ class Player {
     const hipX = weightShift;
     const hipY = 8 + bob * 0.5 + kneeBend;
 
-    const legStride = walkSin * 8 * walkAmt;
+    const legStride = walkSin * 8 * walkAmt * (this.isAirborne ? 0.3 : 1);
     const legLift = Math.max(0, Math.cos(this.walkPhase)) * 5 * walkAmt;
     const legLiftR = Math.max(0, -Math.cos(this.walkPhase)) * 5 * walkAmt;
 
@@ -676,30 +716,30 @@ class Player {
     ctx.lineWidth = 10;
     ctx.beginPath();
     ctx.moveTo(hipX - 4, hipY);
-    ctx.lineTo(hipX - 6 + legStride * 0.5, hipY + 12 - legLift * 0.5);
+    ctx.lineTo(hipX - 6 + legStride * 0.5, hipY + 12 - legLift * 0.5 - airTuck * 0.5);
     ctx.stroke();
     ctx.beginPath();
     ctx.moveTo(hipX + 4, hipY);
-    ctx.lineTo(hipX + 6 - legStride * 0.5, hipY + 12 - legLiftR * 0.5);
+    ctx.lineTo(hipX + 6 - legStride * 0.5, hipY + 12 - legLiftR * 0.5 - airTuck * 0.5);
     ctx.stroke();
 
     ctx.strokeStyle = '#0a0e18';
     ctx.lineWidth = 8;
     ctx.beginPath();
-    ctx.moveTo(hipX - 6 + legStride * 0.5, hipY + 12 - legLift * 0.5);
-    ctx.lineTo(hipX - 6 + legStride, hipY + 24 - legLift);
+    ctx.moveTo(hipX - 6 + legStride * 0.5, hipY + 12 - legLift * 0.5 - airTuck * 0.5);
+    ctx.lineTo(hipX - 6 + legStride - airTuck * 0.4, hipY + 24 - legLift - airTuck * 1.8);
     ctx.stroke();
     ctx.beginPath();
-    ctx.moveTo(hipX + 6 - legStride * 0.5, hipY + 12 - legLiftR * 0.5);
-    ctx.lineTo(hipX + 6 - legStride, hipY + 24 - legLiftR);
+    ctx.moveTo(hipX + 6 - legStride * 0.5, hipY + 12 - legLiftR * 0.5 - airTuck * 0.5);
+    ctx.lineTo(hipX + 6 - legStride + airTuck * 0.4, hipY + 24 - legLiftR - airTuck * 1.8);
     ctx.stroke();
 
     ctx.fillStyle = '#0a0e18';
     ctx.beginPath();
-    ctx.ellipse(hipX - 6 + legStride, hipY + 25 - legLift, 6, 3, 0, 0, Math.PI * 2);
+    ctx.ellipse(hipX - 6 + legStride - airTuck * 0.4, hipY + 25 - legLift - airTuck * 1.8, 6, 3, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.beginPath();
-    ctx.ellipse(hipX + 6 - legStride, hipY + 25 - legLiftR, 6, 3, 0, 0, Math.PI * 2);
+    ctx.ellipse(hipX + 6 - legStride + airTuck * 0.4, hipY + 25 - legLiftR - airTuck * 1.8, 6, 3, 0, 0, Math.PI * 2);
     ctx.fill();
 
     const torsoBottomY = hipY - 2;
