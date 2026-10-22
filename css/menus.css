@@ -455,3 +455,39 @@
   border-color: rgba(74, 158, 255, 0.5);
   color: #8fc9ff;
 }
+
+.help-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  max-height: 62vh;
+  padding-right: 10px;
+  margin-right: -10px;
+}
+.help-list::-webkit-scrollbar { width: 8px; }
+.help-list::-webkit-scrollbar-track { background: rgba(10, 15, 25, 0.6); border-radius: 6px; }
+.help-list::-webkit-scrollbar-thumb { background: rgba(74, 158, 255, 0.4); border-radius: 6px; }
+.help-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 14px;
+  background: rgba(10, 15, 25, 0.7);
+  border-left: 3px solid #4a9eff;
+  border-radius: 3px;
+}
+.help-key {
+  min-width: 120px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #8fc9ff;
+  flex-shrink: 0;
+}
+.help-desc {
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: #e8eef5;
+  line-height: 1.4;
+}
