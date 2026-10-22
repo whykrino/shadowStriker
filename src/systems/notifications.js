@@ -24,19 +24,23 @@ class NotificationSystem {
 
     while (this.items.length > 4) {
       const oldest = this.items.shift();
-      oldest.el.remove();
+      if (oldest && oldest.el && oldest.el.parentNode) oldest.el.remove();
     }
   }
 
   update(dt) {
     for (let i = this.items.length - 1; i >= 0; i--) {
       const it = this.items[i];
+      if (!it || !it.el) {
+        this.items.splice(i, 1);
+        continue;
+      }
       it.timer -= dt;
       if (it.timer <= 0 && !it.el.classList.contains('out')) {
         it.el.classList.add('out');
         it.timer = -0.6;
       } else if (it.timer < -0.5) {
-        it.el.remove();
+        if (it.el.parentNode) it.el.remove();
         this.items.splice(i, 1);
       }
     }
