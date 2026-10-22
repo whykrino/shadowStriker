@@ -122,9 +122,9 @@ const CODEX_DATA = {
   ],
 
   abilities: [
-    { id: 'dash', name: 'РЫВОК', desc: 'SHIFT - стремительный рывок', unlock: 2, icon: '»' },
-    { id: 'charge', name: 'ЗАРЯЖЕННЫЙ УДАР', desc: 'ПРОБЕЛ - удержание даёт мощную атаку', unlock: 3, icon: '⚡' },
-    { id: 'spin', name: 'ВИХРЬ', desc: 'ПКМ - круговой удар', unlock: 4, icon: '◎' },
+    { id: 'dash', name: 'РЫВОК', desc: 'Стремительный рывок, 3 заряда', unlock: 2, icon: '»' },
+    { id: 'charge', name: 'ЗАРЯЖЕННЫЙ УДАР', desc: 'Мощная атака, урон растёт со временем удержания', unlock: 3, icon: '⚡' },
+    { id: 'airAttack', name: 'УДАР В ПАДЕНИИ', desc: 'Рубящий удар вниз с ударной волной', unlock: 4, icon: '▼' },
     { id: 'heal', name: 'РЕГЕНЕРАЦИЯ', desc: '+3 HP/сек вне боя', unlock: 6, icon: '✚' },
     { id: 'berserk', name: 'ЯРОСТЬ', desc: '+25% урона при HP ниже 30%', unlock: 8, icon: '⚔' },
     { id: 'phoenix', name: 'ФЕНИКС', desc: 'Воскрешение с 50% HP', unlock: 12, icon: '✦' },
